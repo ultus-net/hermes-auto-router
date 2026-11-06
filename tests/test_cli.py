@@ -132,5 +132,45 @@ class VerifyCatalogTest(unittest.TestCase):
         self.assertEqual(self.run_check([]), 1)
 
 
+class StatusTest(unittest.TestCase):
+    def run_status(self, settings, aliases, targets):
+        args = argparse.Namespace(refresh=False)
+        out = io.StringIO()
+        with (
+            mock.patch.object(cli, "_settings", return_value=settings),
+            mock.patch.object(cli, "_config_get", return_value=None),
+            mock.patch.object(
+                cli.catalog, "synthetic_aliases", return_value=aliases
+            ) as synthetic,
+            mock.patch.object(
+                cli.catalog, "alias_target_map", return_value=targets
+            ) as target_map,
+            contextlib.redirect_stdout(out),
+        ):
+            code = cli._status(args)
+        return code, out.getvalue(), synthetic, target_map
+
+    def test_resolves_the_target_map_once_and_prints_the_pool(self):
+        settings = Settings(aliases=("~a/one-latest", "~b/two-latest"))
+        targets = {"~a/one-latest": "a/one-1"}
+        code, text, synthetic, target_map = self.run_status(
+            settings, ["syn:large:text"], targets
+        )
+        self.assertEqual(code, 0)
+        synthetic.assert_called_once()
+        target_map.assert_called_once()
+        self.assertIn("1/2 aliases resolve", text)
+        self.assertIn("a/one-1", text)
+        self.assertIn("(no live target) ~b/two-latest", text)
+
+    def test_does_not_label_cached_catalog_data_as_live(self):
+        # A cached failure serves an empty list for 60 seconds. status must not
+        # claim that reading is live.
+        code, text, _, _ = self.run_status(Settings(), [], {})
+        self.assertEqual(code, 0)
+        self.assertIn("synthetic      0 syn:* aliases", text)
+        self.assertNotIn("syn:* aliases live", text)
+
+
 if __name__ == "__main__":
     unittest.main()

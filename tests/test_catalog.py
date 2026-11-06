@@ -88,6 +88,40 @@ class CachedTest(unittest.TestCase):
         self.assertNotIn("k", catalog._REFRESHING)
 
 
+class RefreshTest(unittest.TestCase):
+    def setUp(self):
+        catalog._MEMORY.clear()
+        catalog._REFRESHING.clear()
+        self.addCleanup(catalog._MEMORY.clear)
+        self.addCleanup(catalog._REFRESHING.clear)
+        for name, value in (("_read_disk", catalog._MISSING), ("_write_disk", None)):
+            patcher = mock.patch.object(catalog, name, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_refresh_is_single_flight_per_key(self):
+        produce = mock.Mock()
+        with mock.patch.object(catalog.threading, "Thread") as thread:
+            catalog._refresh_in_background("k", 60, produce)
+            catalog._refresh_in_background("k", 60, produce)
+        thread.assert_called_once()
+        thread.return_value.start.assert_called_once()
+        self.assertIn("k", catalog._REFRESHING)
+
+    def test_thread_start_failure_clears_the_marker(self):
+        with mock.patch.object(catalog.threading, "Thread") as thread:
+            thread.return_value.start.side_effect = RuntimeError("no threads")
+            catalog._refresh_in_background("k", 60, mock.Mock())
+        self.assertNotIn("k", catalog._REFRESHING)
+
+    def test_failed_refresh_records_the_failure_and_clears_the_marker(self):
+        produce = mock.Mock(side_effect=RuntimeError("catalog down"))
+        with mock.patch.object(catalog.logger, "warning"):
+            catalog._refresh("k", 60, produce)
+        self.assertNotIn("k", catalog._REFRESHING)
+        self.assertEqual(catalog._MEMORY["k"][1], [])
+
+
 class ResolvedPoolTest(unittest.TestCase):
     def setUp(self):
         catalog._MEMORY.clear()

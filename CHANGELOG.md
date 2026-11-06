@@ -11,10 +11,12 @@ All notable changes to this project are recorded here. The format follows
 ### Added
 
 - `tests/test_catalog.py` covers the two-layer cache: negative caching, the
-  short failure TTL, refresh bypass, the cold-path no-fetch guarantee, and
-  serving a stale value while a background refresh runs.
+  short failure TTL, refresh bypass, the cold-path no-fetch guarantee, serving
+  a stale value while a background refresh runs, and the single-flight refresh
+  marker on success, failure, and thread-start failure.
 - `tests/test_cli.py` covers `apply` defaults, dry-run, alias validation, the
-  JSON config values, the credential resolver, and the empty-catalog failure.
+  JSON config values, the credential resolver, the empty-catalog failure, and
+  `status` resolving the target map once.
 - `pyproject.toml`, `requirements-dev.txt`, `Makefile`, and a CI workflow pin
   Python 3.11, Ruff 0.17.4, the test command, and the allowed branch prefixes.
 - `AGENTS.md` records the repo-specific rules for agents.
@@ -47,6 +49,8 @@ All notable changes to this project are recorded here. The format follows
   `openrouter.ai.attacker.test` no longer receives the resolved pool.
 - `install.sh` refuses to replace a real directory at either link target, and
   rejects unknown or extra arguments.
+- `status` no longer calls cached catalog data "live", since a cached failure is
+  served as an empty list for 60 seconds.
 - Provider tests skip cleanly when Hermes Agent is not importable, so the suite
   passes on a bare checkout and in CI.
 
