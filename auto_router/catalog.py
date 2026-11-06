@@ -105,16 +105,28 @@ def _write_disk(key: str, value: Any) -> None:
         logger.debug("auto-router: catalog cache write failed: %s", exc)
 
 
+def _lookup(key: str, ttl: float) -> Any:
+    """Fresh value from memory or disk, or ``_MISSING``.
+
+    A disk hit also fills the in-process layer. Expired memory entries stay put,
+    so the request path can still serve them as stale.
+    """
+    hit = _MEMORY.get(key)
+    if hit and _fresh(hit[0], hit[1], ttl):
+        return hit[1]
+    disk = _read_disk(key, ttl)
+    if disk is not _MISSING:
+        _MEMORY[key] = (time.time(), disk)
+        return disk
+    return _MISSING
+
+
 def _load(key: str, ttl: float, produce: Callable[[], Any], *, refresh: bool) -> Any:
     """Return the cached value or produce a new one. The caller holds ``_LOCK``."""
     if not refresh:
-        hit = _MEMORY.get(key)
-        if hit and _fresh(hit[0], hit[1], ttl):
-            return hit[1]
-        disk = _read_disk(key, ttl)
-        if disk is not _MISSING:
-            _MEMORY[key] = (time.time(), disk)
-            return disk
+        hit = _lookup(key, ttl)
+        if hit is not _MISSING:
+            return hit
     try:
         value = produce()
     except Exception:
@@ -177,17 +189,13 @@ def _cached(
     blocking-only mode: a non-blocking call still just schedules a refresh.
     """
     if not refresh:
-        hit = _MEMORY.get(key)
-        if hit and _fresh(hit[0], hit[1], ttl):
-            return hit[1]
-        disk = _read_disk(key, ttl)
-        if disk is not _MISSING:
-            _MEMORY[key] = (time.time(), disk)
-            return disk
+        hit = _lookup(key, ttl)
+        if hit is not _MISSING:
+            return hit
     if not blocking:
-        hit = _MEMORY.get(key)
+        stale = _MEMORY.get(key)
         _refresh_in_background(key, ttl, produce)
-        return hit[1] if hit else _MISSING
+        return stale[1] if stale else _MISSING
     with _LOCK:
         return _load(key, ttl, produce, refresh=refresh)
 

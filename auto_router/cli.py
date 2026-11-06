@@ -239,7 +239,7 @@ def _status(args: argparse.Namespace) -> int:
 
     try:
         aliases = catalog.synthetic_aliases(refresh=args.refresh)
-        print(f"synthetic      {len(aliases)} syn:* aliases live")
+        print(f"synthetic      {len(aliases)} syn:* aliases")
         for alias in aliases:
             print(f"  {alias}")
     except Exception as exc:
