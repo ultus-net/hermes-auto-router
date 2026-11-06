@@ -73,14 +73,15 @@ link_dir() {
 
 mkdir -p "$HERMES_HOME_DIR/plugins/model-providers"
 
+# General half (middleware + `hermes auto-router`). Link it first so a conflict
+# aborts before the provider half is put in place. Running from the installed
+# copy is the normal `hermes plugins install` case, so the tree is already there.
+link_dir "$HERE" "$GENERAL_TARGET" "general plugin"
+
 # Model-provider half. Hermes discovers this from providers/__init__.py, not
 # from PluginManager, so `hermes plugins install` cannot place it: it has to
 # live under plugins/model-providers/<name>/.
 link_dir "$HERE/providers/synthetic" "$PROVIDER_TARGET" "provider"
-
-# General half (middleware + `hermes auto-router`). Running from the installed
-# copy is the normal `hermes plugins install` case, so the tree is already there.
-link_dir "$HERE" "$GENERAL_TARGET" "general plugin"
 
 if [[ "$enable" -eq 0 ]]; then
   echo "skipped enable (--no-enable)"

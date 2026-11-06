@@ -35,8 +35,8 @@ All notable changes to this project are recorded here. The format follows
   retried on every `openrouter/auto` request. A catalog outage no longer turns
   each request into another eight-second fetch.
 - The request path never fetches a catalog. A cold or expired cache serves the
-  stale value when one exists, otherwise `[]`, and refreshes in a daemon
-  thread. The router is unconstrained for that one call.
+  stale in-process value when one exists, otherwise `[]`, and refreshes in a
+  daemon thread. The router is unconstrained for that one call.
 - `--refresh` now bypasses the disk cache, and covers both the OpenRouter and
   Synthetic catalogs.
 - `verify` treats an empty Synthetic catalog as a failure, so a cached catalog

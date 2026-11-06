@@ -86,7 +86,10 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
     apply_cmd.add_argument(
         "--no-default",
         action="store_true",
-        help="Do not change model.provider/model.default",
+        help=(
+            "Do not change model.provider, model.default, model.base_url, "
+            "or model_aliases.syn:auto"
+        ),
     )
     apply_cmd.add_argument(
         "--dry-run", action="store_true", help="Print the writes without applying them"
@@ -311,8 +314,11 @@ def _check_synthetic_catalog(refresh: bool) -> int:
     except Exception as exc:
         print(f"   ✗ unreachable: {exc}")
         return 1
-    print(f"   ✓ {len(aliases)} syn:* aliases: {', '.join(aliases) or '(none)'}")
-    return 0 if aliases else 1
+    if not aliases:
+        print("   ✗ no syn:* aliases published")
+        return 1
+    print(f"   ✓ {len(aliases)} syn:* aliases: {', '.join(aliases)}")
+    return 0
 
 
 def _check_pool(settings: Settings, refresh: bool) -> tuple[list[str], int]:

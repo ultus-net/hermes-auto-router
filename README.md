@@ -50,10 +50,11 @@ An `llm_request` middleware resolves each alias to its current concrete slug
 (`alias_target.slug`) and injects that list into every `openrouter/auto`
 request. The alias target map is cached in-process and on disk for six hours,
 and warmed in a background thread at plugin load. The request path never
-fetches: on a cold or expired cache it uses the stale map when one exists,
-otherwise it leaves the router unconstrained for that call and refreshes in a
-background thread. An empty or failed lookup is cached for 60 seconds, so an
-outage does not turn every request into another eight-second fetch.
+fetches: on a cold or expired cache it uses the stale in-process map when one
+exists, otherwise it leaves the router unconstrained for that call. A fresh
+process starts empty and fills the map in a background thread. An empty or
+failed lookup is cached for 60 seconds, so an outage does not turn every
+request into another eight-second fetch.
 
 ### 3. Failover is Hermes' own
 

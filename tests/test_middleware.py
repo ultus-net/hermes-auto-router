@@ -77,5 +77,30 @@ class MiddlewareTest(unittest.TestCase):
         self.assertIsNone(call())
 
 
+class RequestPathTest(unittest.TestCase):
+    """The middleware must not fetch a catalog on the request path."""
+
+    def setUp(self):
+        middleware.configure(Settings(aliases=("~a/one-latest",)))
+        middleware.catalog._MEMORY.clear()
+        middleware.catalog._REFRESHING.clear()
+        self.addCleanup(middleware.catalog._MEMORY.clear)
+        self.addCleanup(middleware.catalog._REFRESHING.clear)
+
+    def test_cold_cache_schedules_a_refresh_and_returns_unchanged(self):
+        with (
+            mock.patch.object(
+                middleware.catalog,
+                "_read_disk",
+                return_value=middleware.catalog._MISSING,
+            ),
+            mock.patch.object(middleware.catalog, "openrouter_models") as models,
+            mock.patch.object(middleware.catalog, "_refresh_in_background") as refresh,
+        ):
+            self.assertIsNone(call())
+        models.assert_not_called()
+        refresh.assert_called_once()
+
+
 if __name__ == "__main__":
     unittest.main()

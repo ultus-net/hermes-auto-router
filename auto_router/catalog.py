@@ -13,8 +13,9 @@ OpenRouter alias target map. The Auto Router pool is a pure function of the
 target map, so it is recomputed per call instead of cached a third time.
 
 The request path never fetches. On a cold or expired cache it serves the stale
-value if one exists, otherwise ``[]``, and schedules a daemon refresh. The Auto
-Router runs unconstrained for that one call, and the next call is constrained.
+in-process value if one exists, otherwise ``[]``, and schedules a daemon
+refresh. The Auto Router runs unconstrained for that one call, and the next call
+is constrained.
 
 Empty results are cached too, for ``NEGATIVE_TTL_SECONDS``. Without that, a
 catalog outage or an empty pool would turn every ``openrouter/auto`` request
@@ -132,7 +133,8 @@ def _refresh(key: str, ttl: float, produce: Callable[[], Any]) -> None:
         with _LOCK:
             _load(key, ttl, produce, refresh=False)
     except Exception as exc:
-        logger.debug("auto-router: background catalog refresh failed: %s", exc)
+        # One log per failed refresh (the negative cache rate-limits retries).
+        logger.warning("auto-router: background catalog refresh failed: %s", exc)
     finally:
         with _REFRESH_LOCK:
             _REFRESHING.discard(key)
@@ -167,10 +169,12 @@ def _cached(
 ) -> Any:
     """Return the cached value for *key*, calling *produce* on a miss.
 
-    ``blocking=False`` never calls *produce*. It returns the stale value when
-    one exists, otherwise ``_MISSING``, and schedules a daemon refresh. Callers
-    on the request path use this mode.
-    ``refresh=True`` skips both cache layers and overwrites them.
+    ``blocking=False`` never calls *produce*. It returns the stale in-process
+    value when one exists, otherwise ``_MISSING``, and schedules a daemon
+    refresh. Callers on the request path use this mode.
+
+    ``refresh=True`` skips both cache layers and overwrites them. It is a
+    blocking-only mode: a non-blocking call still just schedules a refresh.
     """
     if not refresh:
         hit = _MEMORY.get(key)
@@ -269,9 +273,9 @@ def resolved_pool(
     return resolve_pool(tuple(aliases or ()), targets)
 
 
-def warm(aliases: list[str] | tuple[str, ...]) -> None:
+def warm() -> None:
     """Populate the target-map cache off the request path. Never raises."""
     try:
-        resolved_pool(aliases)
+        alias_target_map()
     except Exception as exc:
         logger.debug("auto-router: catalog warm failed: %s", exc)
