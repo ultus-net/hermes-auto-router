@@ -254,7 +254,7 @@ def _status(args: argparse.Namespace) -> int:
             print(f"  {slug}")
         for alias in settings.aliases:
             if alias not in targets:
-                print(f"  (no live target) {alias}")
+                print(f"  (no target in catalog) {alias}")
     except Exception as exc:
         print(f"openrouter     catalog unreachable: {exc}")
     return 0

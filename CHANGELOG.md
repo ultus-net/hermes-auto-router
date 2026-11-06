@@ -6,17 +6,35 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `tests/test_catalog.py` covers the single-flight refresh marker: one thread
+  per key, and the marker clears on success, on a failed refresh, and when the
+  thread cannot start.
+- `tests/test_cli.py` covers `status`: one target-map resolution, and no "live"
+  label on cached catalog data.
+
+### Changed
+
+- The memory-then-disk cache probe is one helper, `catalog._lookup`, shared by
+  `_load` and `_cached`. The request path still probes without the lock.
+
+### Fixed
+
+- `status` prints `(no target in catalog)` instead of `(no live target)`, since
+  it may serve data cached up to six hours ago.
+- The README is split into a short landing page plus `docs/`, so the install,
+  usage, verification, troubleshooting, and development detail has a home.
+
 ## [1.1.0] - 2026-11-06
 
 ### Added
 
 - `tests/test_catalog.py` covers the two-layer cache: negative caching, the
-  short failure TTL, refresh bypass, the cold-path no-fetch guarantee, serving
-  a stale value while a background refresh runs, and the single-flight refresh
-  marker on success, failure, and thread-start failure.
+  short failure TTL, refresh bypass, the cold-path no-fetch guarantee, and
+  serving a stale value while a background refresh runs.
 - `tests/test_cli.py` covers `apply` defaults, dry-run, alias validation, the
-  JSON config values, the credential resolver, the empty-catalog failure, and
-  `status` resolving the target map once.
+  JSON config values, the credential resolver, and the empty-catalog failure.
 - `pyproject.toml`, `requirements-dev.txt`, `Makefile`, and a CI workflow pin
   Python 3.11, Ruff 0.17.4, the test command, and the allowed branch prefixes.
 - `AGENTS.md` records the repo-specific rules for agents.
@@ -49,8 +67,6 @@ All notable changes to this project are recorded here. The format follows
   `openrouter.ai.attacker.test` no longer receives the resolved pool.
 - `install.sh` refuses to replace a real directory at either link target, and
   rejects unknown or extra arguments.
-- `status` no longer calls cached catalog data "live", since a cached failure is
-  served as an empty list for 60 seconds.
 - Provider tests skip cleanly when Hermes Agent is not importable, so the suite
   passes on a bare checkout and in CI.
 
