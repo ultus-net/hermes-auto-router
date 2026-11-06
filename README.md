@@ -128,6 +128,24 @@ HERMES_DUMP_REQUESTS=1 hermes chat -q "Reply OK" --model openrouter/auto --provi
 The dump under `$HERMES_HOME/sessions/request_dump_*.json` carries
 `body.extra_body.plugins[0].allowed_models` with the resolved slugs.
 
+To prove the failover without waiting for a real rate limit, run a throwaway
+profile whose Synthetic key is invalid:
+
+```bash
+T=$(mktemp -d)
+cp ~/.hermes/config.yaml "$T/config.yaml"
+sed 's/^SYNTHETIC_API_KEY=.*/SYNTHETIC_API_KEY=syn_invalid/' ~/.hermes/.env > "$T/.env"
+mkdir -p "$T/plugins/model-providers"
+ln -s "$PWD" "$T/plugins/auto-router"
+ln -s "$PWD/providers/synthetic" "$T/plugins/model-providers/synthetic"
+HERMES_HOME="$T" HERMES_DUMP_REQUESTS=1 hermes chat -q "Reply OK"
+```
+
+Expected: `⚠️ Model fallback: syn:large:text via synthetic unavailable
+(authentication failed); using openrouter/auto via openrouter.` The second
+request dump points at `openrouter.ai` and carries the `auto-router` plugin
+entry.
+
 ## Troubleshooting
 
 **`404 No models match your request and model restrictions`** — the pool

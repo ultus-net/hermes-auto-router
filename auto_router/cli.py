@@ -28,7 +28,7 @@ from .settings import (
     Settings,
 )
 
-SYNTHETIC_BASE_URL = "https://api.synthetic.new/openai/v1"
+SYNTHETIC_BASE_URL = "https://api.synthetic.new/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Used only when the live Synthetic catalog is unreachable during ``apply``.
@@ -165,7 +165,7 @@ def _post_chat(
     body: dict[str, Any] = {
         "model": model,
         "messages": [{"role": "user", "content": "Reply with the single word OK."}],
-        "max_tokens": 16,
+        "max_tokens": 64,
     }
     if extra:
         body.update(extra)

@@ -59,14 +59,20 @@ class ProfileTest(unittest.TestCase):
         cls.profile = cls.module.synthetic
 
     def test_registers_under_synthetic(self):
+        # Assert the resolved profile's behaviour, not object identity: discovery
+        # may register the installed copy of this same module, and last-writer-wins
+        # is the documented contract.
         from providers import get_provider_profile
 
-        self.assertIs(get_provider_profile("synthetic"), self.profile)
-        self.assertIs(get_provider_profile("syn"), self.profile)
+        for name in ("synthetic", "syn"):
+            profile = get_provider_profile(name)
+            self.assertIsNotNone(profile, name)
+            self.assertEqual(profile.name, "synthetic")
+            self.assertEqual(profile.base_url, "https://api.synthetic.new/v1")
 
     def test_points_at_the_openai_compatible_endpoint(self):
-        self.assertEqual(self.profile.base_url, "https://api.synthetic.new/openai/v1")
-        self.assertEqual(self.profile.models_url, "https://api.synthetic.new/openai/v1/models")
+        self.assertEqual(self.profile.base_url, "https://api.synthetic.new/v1")
+        self.assertEqual(self.profile.models_url, "https://api.synthetic.new/v1/models")
         self.assertEqual(self.profile.env_vars[0], "SYNTHETIC_API_KEY")
 
     def test_aux_models_track_the_vision_split(self):
