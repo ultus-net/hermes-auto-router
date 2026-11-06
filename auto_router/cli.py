@@ -2,7 +2,9 @@
 
 ``apply`` writes the routing policy through Hermes' own config writer
 (``hermes_cli.config.set_config_value``), never by editing YAML by hand, so the
-live gateway's config guards and atomic write still apply.
+live gateway's config guards and atomic write still apply. Structured values are
+serialised as JSON: Hermes parses YAML and JSON is a YAML subset, so the plugin
+does not need a PyYAML dependency of its own.
 
 ``verify`` is the honest check: it resolves the live catalogs and, when the keys
 are present, sends one real completion to each provider and prints the model
@@ -13,20 +15,17 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
+import logging
 import sys
 import urllib.request
 from typing import Any
 
 from . import catalog
-from .pool import AUTO_ROUTER_MODEL
-from .settings import (
-    COST_TIERS,
-    DEFAULT_ALIASES,
-    DEFAULT_PRIMARY_MODEL,
-    DEFAULT_SMALL_MODEL,
-    Settings,
-)
+from .credentials import api_key
+from .pool import AUTO_ROUTER_MODEL, auto_router_entry, resolve_pool
+from .settings import Settings
+
+logger = logging.getLogger(__name__)
 
 SYNTHETIC_BASE_URL = "https://api.synthetic.new/openai/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -64,28 +63,44 @@ FALLBACK_CAPABILITIES: dict[str, dict[str, Any]] = {
 }
 
 
-# ── argparse ────────────────────────────────────────────────────────────────
-
-
 def register_cli(subparser: argparse.ArgumentParser) -> None:
     subs = subparser.add_subparsers(dest="auto_router_command")
 
     status = subs.add_parser("status", help="Show the routing policy and the live pool")
-    status.add_argument("--refresh", action="store_true", help="Bypass the catalog cache")
+    status.add_argument("--refresh", action="store_true", help="Bypass the catalog caches")
     status.set_defaults(func=_status)
 
     apply_cmd = subs.add_parser(
         "apply", help="Make Synthetic primary and OpenRouter Auto Router the fallback"
     )
-    apply_cmd.add_argument("--primary", default=None, help=f"Primary syn:* alias (default {DEFAULT_PRIMARY_MODEL})")
-    apply_cmd.add_argument("--small", default=None, help=f"Small/aux syn:* alias (default {DEFAULT_SMALL_MODEL})")
-    apply_cmd.add_argument("--no-default", action="store_true", help="Do not change model.provider/model.default")
-    apply_cmd.add_argument("--dry-run", action="store_true", help="Print the writes without applying them")
+    apply_cmd.add_argument(
+        "--primary",
+        default=None,
+        help="Primary syn:* alias (default: the configured primary_model)",
+    )
+    apply_cmd.add_argument(
+        "--small",
+        default=None,
+        help="Small/aux syn:* alias (default: the configured small_model)",
+    )
+    apply_cmd.add_argument(
+        "--no-default",
+        action="store_true",
+        help=(
+            "Do not change model.provider, model.default, model.base_url, "
+            "or model_aliases.syn:auto"
+        ),
+    )
+    apply_cmd.add_argument(
+        "--dry-run", action="store_true", help="Print the writes without applying them"
+    )
     apply_cmd.set_defaults(func=_apply)
 
     verify = subs.add_parser("verify", help="Live-probe both providers end to end")
-    verify.add_argument("--refresh", action="store_true", help="Bypass the catalog cache")
-    verify.add_argument("--timeout", type=float, default=45.0, help="Per-request timeout in seconds")
+    verify.add_argument("--refresh", action="store_true", help="Bypass the catalog caches")
+    verify.add_argument(
+        "--timeout", type=float, default=45.0, help="Per-request timeout in seconds"
+    )
     verify.set_defaults(func=_verify)
 
 
@@ -95,9 +110,6 @@ def handle(args: argparse.Namespace) -> int:
         print("usage: hermes auto-router {status,apply,verify}", file=sys.stderr)
         return 2
     return int(func(args) or 0)
-
-
-# ── helpers ─────────────────────────────────────────────────────────────────
 
 
 def _settings() -> Settings:
@@ -118,7 +130,8 @@ def _config_get(key: str, default: Any = None) -> Any:
             if node is None:
                 return default
         return node
-    except Exception:
+    except Exception as exc:
+        logger.debug("auto-router: config read failed for %s: %s", key, exc)
         return default
 
 
@@ -148,19 +161,30 @@ def _capabilities() -> dict[str, dict[str, Any]]:
             if isinstance(context, int) and context > 0:
                 entry["context_window"] = context
             out[model_id] = entry
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "auto-router: live capability discovery failed (%s); using built-in defaults",
+            exc,
+        )
     return out or dict(FALLBACK_CAPABILITIES)
 
 
-def _yaml(value: Any) -> str:
-    import yaml
+def _structured(value: Any) -> str:
+    """Serialise a list or mapping for ``set_config_value``.
 
-    return yaml.safe_dump(value, sort_keys=False, default_flow_style=True).strip()
+    Hermes parses the value as YAML, and JSON is valid YAML. That keeps this
+    plugin dependency-free while still producing real dicts and lists.
+    """
+    return json.dumps(value)
 
 
 def _post_chat(
-    base_url: str, api_key: str, model: str, *, extra: dict[str, Any] | None = None, timeout: float = 45.0
+    base_url: str,
+    api_key_value: str,
+    model: str,
+    *,
+    extra: dict[str, Any] | None = None,
+    timeout: float = 45.0,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {
         "model": model,
@@ -173,7 +197,7 @@ def _post_chat(
         base_url.rstrip("/") + "/chat/completions",
         data=json.dumps(body).encode("utf-8"),
         headers={
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Bearer {api_key_value}",
             "Content-Type": "application/json",
             "Accept": "application/json",
         },
@@ -185,12 +209,11 @@ def _post_chat(
 
 def _reply_text(payload: dict[str, Any]) -> str:
     try:
-        return (payload["choices"][0]["message"].get("content") or "").strip()
-    except Exception:
+        content = payload["choices"][0]["message"].get("content")
+    except (AttributeError, IndexError, KeyError, TypeError) as exc:
+        logger.debug("auto-router: unexpected completion payload: %s", exc)
         return ""
-
-
-# ── status ──────────────────────────────────────────────────────────────────
+    return content.strip() if isinstance(content, str) else ""
 
 
 def _status(args: argparse.Namespace) -> int:
@@ -215,7 +238,7 @@ def _status(args: argparse.Namespace) -> int:
     print()
 
     try:
-        aliases = catalog.synthetic_aliases()
+        aliases = catalog.synthetic_aliases(refresh=args.refresh)
         print(f"synthetic      {len(aliases)} syn:* aliases live")
         for alias in aliases:
             print(f"  {alias}")
@@ -224,26 +247,25 @@ def _status(args: argparse.Namespace) -> int:
     print()
 
     try:
-        pool = catalog.resolved_pool(settings.aliases, refresh=args.refresh)
+        targets = catalog.alias_target_map(refresh=args.refresh)
+        pool = resolve_pool(settings.aliases, targets)
         print(f"openrouter     {len(pool)}/{len(settings.aliases)} aliases resolve")
         for slug in pool:
             print(f"  {slug}")
-        missing = [a for a in settings.aliases if a not in catalog.alias_targets(catalog.openrouter_models())]
-        for alias in missing:
-            print(f"  (no live target) {alias}")
+        for alias in settings.aliases:
+            if alias not in targets:
+                print(f"  (no live target) {alias}")
     except Exception as exc:
         print(f"openrouter     catalog unreachable: {exc}")
     return 0
 
 
-# ── apply ───────────────────────────────────────────────────────────────────
-
-
 def _apply(args: argparse.Namespace) -> int:
     from hermes_cli.config import set_config_value
 
-    primary = args.primary or DEFAULT_PRIMARY_MODEL
-    small = args.small or DEFAULT_SMALL_MODEL
+    settings = _settings()
+    primary = args.primary or settings.primary_model
+    small = args.small or settings.small_model
     if not primary.startswith("syn:") or not small.startswith("syn:"):
         print("✗ --primary and --small must be syn:* aliases", file=sys.stderr)
         return 2
@@ -254,13 +276,17 @@ def _apply(args: argparse.Namespace) -> int:
             ("model.provider", "synthetic", False),
             ("model.default", primary, False),
             ("model.base_url", "", False),
-            ("model_aliases.syn:auto", _yaml({"model": primary, "provider": "synthetic"}), True),
+            ("model_aliases.syn:auto", _structured({"model": primary, "provider": "synthetic"}), True),
         ]
     writes += [
-        ("fallback_providers", _yaml([{"provider": "openrouter", "model": AUTO_ROUTER_MODEL}]), False),
+        (
+            "fallback_providers",
+            _structured([{"provider": "openrouter", "model": AUTO_ROUTER_MODEL}]),
+            False,
+        ),
         # force: the validator only knows the top-level `model_overrides` key, not
         # per-provider children, and would warn on a key the runtime does read.
-        ("model_overrides.synthetic", _yaml(_capabilities()), True),
+        ("model_overrides.synthetic", _structured(_capabilities()), True),
         ("auxiliary.title_generation.provider", "synthetic", False),
         ("auxiliary.title_generation.model", small, False),
     ]
@@ -281,69 +307,82 @@ def _apply(args: argparse.Namespace) -> int:
     return 0
 
 
-# ── verify ──────────────────────────────────────────────────────────────────
+def _check_synthetic_catalog(refresh: bool) -> int:
+    print("1. Synthetic catalog")
+    try:
+        aliases = catalog.synthetic_aliases(refresh=refresh)
+    except Exception as exc:
+        print(f"   ✗ unreachable: {exc}")
+        return 1
+    if not aliases:
+        print("   ✗ no syn:* aliases published")
+        return 1
+    print(f"   ✓ {len(aliases)} syn:* aliases: {', '.join(aliases)}")
+    return 0
+
+
+def _check_pool(settings: Settings, refresh: bool) -> tuple[list[str], int]:
+    print("2. OpenRouter alias resolution")
+    try:
+        pool = catalog.resolved_pool(settings.aliases, refresh=refresh)
+    except Exception as exc:
+        print(f"   ✗ unreachable: {exc}")
+        return [], 1
+    print(f"   ✓ {len(pool)}/{len(settings.aliases)} aliases resolve to concrete slugs")
+    for slug in pool:
+        print(f"     {slug}")
+    return pool, 0 if pool else 1
+
+
+def _check_synthetic_completion(settings: Settings, timeout: float) -> int:
+    print("3. Synthetic completion")
+    key = api_key("SYNTHETIC_API_KEY")
+    if not key:
+        print("   - skipped: SYNTHETIC_API_KEY is not set")
+        return 0
+    model = settings.primary_model
+    try:
+        payload = _post_chat(SYNTHETIC_BASE_URL, key, model, timeout=timeout)
+    except Exception as exc:
+        print(f"   ✗ {model} failed: {exc}")
+        return 1
+    print(f"   ✓ {model} answered via {payload.get('model', '?')}: {_reply_text(payload)!r}")
+    return 0
+
+
+def _check_openrouter_completion(settings: Settings, pool: list[str], timeout: float) -> int:
+    print("4. OpenRouter Auto Router completion")
+    key = api_key("OPENROUTER_API_KEY")
+    if not key:
+        print("   - skipped: OPENROUTER_API_KEY is not set")
+        return 0
+    if not pool:
+        print("   - skipped: no resolved pool to constrain the router with")
+        return 0
+    try:
+        payload = _post_chat(
+            OPENROUTER_BASE_URL,
+            key,
+            AUTO_ROUTER_MODEL,
+            extra={"plugins": [auto_router_entry(pool, settings.cost_tier)]},
+            timeout=timeout,
+        )
+    except Exception as exc:
+        print(f"   ✗ {AUTO_ROUTER_MODEL} failed: {exc}")
+        return 1
+    print(f"   ✓ {AUTO_ROUTER_MODEL} chose {payload.get('model', '?')}: {_reply_text(payload)!r}")
+    return 0
 
 
 def _verify(args: argparse.Namespace) -> int:
     settings = _settings()
-    failures = 0
-
-    print("1. Synthetic catalog")
-    try:
-        aliases = catalog.synthetic_aliases()
-        print(f"   ✓ {len(aliases)} syn:* aliases: {', '.join(aliases) or '(none)'}")
-    except Exception as exc:
-        print(f"   ✗ unreachable: {exc}")
-        aliases = []
-        failures += 1
-
-    print("2. OpenRouter alias resolution")
-    try:
-        targets = catalog.alias_targets(catalog.openrouter_models())
-        pool = catalog.resolved_pool(settings.aliases, refresh=args.refresh)
-        print(f"   ✓ {len(pool)}/{len(settings.aliases)} aliases resolve to concrete slugs")
-        for slug in pool:
-            print(f"     {slug}")
-        if not pool:
-            failures += 1
-    except Exception as exc:
-        print(f"   ✗ unreachable: {exc}")
-        pool = []
-        failures += 1
-
-    print("3. Synthetic completion")
-    synthetic_key = os.environ.get("SYNTHETIC_API_KEY", "").strip()
-    if not synthetic_key:
-        print("   - skipped: SYNTHETIC_API_KEY is not set")
-    else:
-        model = settings.primary_model
-        try:
-            payload = _post_chat(SYNTHETIC_BASE_URL, synthetic_key, model, timeout=args.timeout)
-            print(f"   ✓ {model} answered via {payload.get('model', '?')}: {_reply_text(payload)!r}")
-        except Exception as exc:
-            print(f"   ✗ {model} failed: {exc}")
-            failures += 1
-
-    print("4. OpenRouter Auto Router completion")
-    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
-    if not openrouter_key:
-        print("   - skipped: OPENROUTER_API_KEY is not set")
-    elif not pool:
-        print("   - skipped: no resolved pool to constrain the router with")
-    else:
-        try:
-            payload = _post_chat(
-                OPENROUTER_BASE_URL,
-                openrouter_key,
-                AUTO_ROUTER_MODEL,
-                extra={"plugins": [{"id": "auto-router", "allowed_models": pool}]},
-                timeout=args.timeout,
-            )
-            print(f"   ✓ {AUTO_ROUTER_MODEL} chose {payload.get('model', '?')}: {_reply_text(payload)!r}")
-        except Exception as exc:
-            print(f"   ✗ {AUTO_ROUTER_MODEL} failed: {exc}")
-            failures += 1
-
+    failures = _check_synthetic_catalog(args.refresh)
+    pool, pool_failures = _check_pool(settings, args.refresh)
+    failures += (
+        pool_failures
+        + _check_synthetic_completion(settings, args.timeout)
+        + _check_openrouter_completion(settings, pool, args.timeout)
+    )
     print()
     print("✓ all checks passed" if failures == 0 else f"✗ {failures} check(s) failed")
     return 0 if failures == 0 else 1

@@ -10,6 +10,9 @@ provider's catalog.
 Only ``syn:*`` ids are kept. Concrete ``hf:*`` / ``infinite:*`` ids are ignored
 on purpose: the point is to never pin a version by hand.
 
+The parser is deliberately separate from ``auto_router.catalog``: the two
+halves install independently, so neither may import the other.
+
 The endpoint is public, so discovery works before a key is configured. Inference
 still needs ``SYNTHETIC_API_KEY``.
 """
@@ -75,7 +78,7 @@ class SyntheticProfile(ProviderProfile):
         Returns ``None`` on failure so the caller falls back to
         ``fallback_models``; a stale in-process cache is preferred over ``None``.
         """
-        global _cache  # noqa: PLW0603
+        global _cache
         now = time.time()
         if _cache and now - _cache[0] < CACHE_TTL_SECONDS:
             return list(_cache[1])

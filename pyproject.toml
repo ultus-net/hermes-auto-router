@@ -1,0 +1,20 @@
+[project]
+name = "hermes-auto-router"
+version = "1.1.0"
+description = "Synthetic primary provider with OpenRouter Auto Router failover for Hermes Agent"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "ultus-net" }]
+dependencies = []
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["SIM108"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["auto_router", "providers"]

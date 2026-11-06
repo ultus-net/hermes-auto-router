@@ -21,7 +21,8 @@ So the alias list is resolved to the concrete slugs it currently points at
 
 from __future__ import annotations
 
-from typing import Any, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Any
 
 ALIAS_PREFIX = "~"
 AUTO_ROUTER_PLUGIN_ID = "auto-router"

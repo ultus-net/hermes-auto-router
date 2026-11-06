@@ -7,12 +7,14 @@ same ``register_provider`` call the discovery path makes.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-HERMES_SRC = Path.home() / ".hermes" / "hermes-agent"
+HERMES_HOME = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+HERMES_SRC = HERMES_HOME / "hermes-agent"
 for path in (str(HERMES_SRC), str(ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
@@ -20,7 +22,25 @@ for path in (str(HERMES_SRC), str(ROOT)):
 PROVIDER = ROOT / "providers" / "synthetic" / "__init__.py"
 
 
+def _hermes_available() -> bool:
+    """True when Hermes' ``providers`` package is importable as a real package.
+
+    A namespace package (``origin is None``) is this repo's ``providers/``
+    directory, which is not Hermes.
+    """
+    try:
+        spec = importlib.util.find_spec("providers")
+    except (ImportError, ValueError):
+        return False
+    return spec is not None and spec.origin is not None
+
+
 def load_provider():
+    # The provider imports Hermes' own `providers` package. A bare checkout
+    # (CI, a docs machine) has no Hermes install. Detect that up front so a real
+    # import error inside Hermes still fails the suite instead of skipping it.
+    if not _hermes_available():
+        raise unittest.SkipTest("Hermes Agent's providers package is not importable")
     spec = importlib.util.spec_from_file_location("auto_router_synthetic_provider", PROVIDER)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

@@ -56,12 +56,11 @@ def register(ctx) -> None:
     )
 
     if settings.enabled:
-        # Warm the pool off the request path so the first openrouter/auto call is
-        # already constrained. A cold cache degrades to an unconstrained router,
-        # never to a failed request.
+        # Warm the target map off the request path so the first openrouter/auto
+        # call is already constrained. A cold cache degrades to an
+        # unconstrained router, never to a failed request.
         threading.Thread(
             target=catalog.warm,
-            args=(settings.aliases,),
             name="auto-router-warm",
             daemon=True,
         ).start()
