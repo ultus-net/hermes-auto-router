@@ -1,0 +1,7 @@
+name: synthetic
+kind: model-provider
+version: 1.0.0
+description: "Synthetic — OpenAI-compatible provider exposing the permanent syn:* category aliases (syn:large:text, syn:small:text, syn:large:vision, syn:small:vision)."
+author: ultus-net
+license: MIT
+homepage: https://github.com/ultus-net/hermes-auto-router

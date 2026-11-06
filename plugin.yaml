@@ -1,0 +1,34 @@
+name: auto-router
+version: 1.0.0
+description: "Synthetic's permanent syn:* aliases as the primary provider, with OpenRouter's Auto Router as the failover. Resolves ~<lab>/<model>-latest aliases to concrete slugs and injects them as the Auto Router's allowed_models, which the aliases cannot match on their own."
+author: ultus-net
+license: MIT
+homepage: https://github.com/ultus-net/hermes-auto-router
+tags:
+  - models
+  - routing
+  - failover
+optional_env:
+  - SYNTHETIC_API_KEY
+  - OPENROUTER_API_KEY
+config_schema:
+  enabled:
+    type: bool
+    default: true
+    description: "Inject the resolved pool into openrouter/auto requests."
+  aliases:
+    type: list
+    default: []
+    description: "OpenRouter ~<lab>/<model>-latest aliases forming the Auto Router pool. Empty uses the built-in frontier list."
+  cost_tier:
+    type: str
+    default: ""
+    description: "Auto Router cost band: low, medium, high, xhigh, max. Empty uses the account default."
+  primary_model:
+    type: str
+    default: syn:large:text
+    description: "Synthetic alias used as the primary model."
+  small_model:
+    type: str
+    default: syn:small:text
+    description: "Synthetic alias used for auxiliary work (titles, compression)."
