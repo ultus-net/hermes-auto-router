@@ -6,6 +6,18 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The README is split into a short landing page plus `docs/`, so the install,
+  usage, verification, troubleshooting, and development detail has a home.
+
+### Fixed
+
+- `status` prints `(no target in catalog)` instead of `(no live target)`, since
+  it may serve data cached up to six hours ago.
+- The refresh-marker tests now seed the marker before asserting it is gone, so
+  deleting the cleanup fails the suite. A success-path test was added.
+
 ## [1.1.0] - 2026-11-06
 
 ### Added
@@ -13,7 +25,7 @@ All notable changes to this project are recorded here. The format follows
 - `tests/test_catalog.py` covers the two-layer cache: negative caching, the
   short failure TTL, refresh bypass, the cold-path no-fetch guarantee, serving
   a stale value while a background refresh runs, and the single-flight refresh
-  marker on success, failure, and thread-start failure.
+  marker on failure and thread-start failure.
 - `tests/test_cli.py` covers `apply` defaults, dry-run, alias validation, the
   JSON config values, the credential resolver, the empty-catalog failure, and
   `status` resolving the target map once.
@@ -30,6 +42,8 @@ All notable changes to this project are recorded here. The format follows
   This removes the plugin's undeclared PyYAML dependency.
 - The per-alias pool cache is gone. The pool is a pure function of the cached
   target map, so one cache now serves every alias set.
+- The memory-then-disk cache probe is one helper, `catalog._lookup`, shared by
+  `_load` and `_cached`.
 
 ### Fixed
 

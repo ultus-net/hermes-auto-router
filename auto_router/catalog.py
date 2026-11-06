@@ -110,6 +110,10 @@ def _lookup(key: str, ttl: float) -> Any:
 
     A disk hit also fills the in-process layer. Expired memory entries stay put,
     so the request path can still serve them as stale.
+
+    ``_load`` calls this under ``_LOCK``. The request path calls it unlocked on
+    purpose: holding ``_LOCK`` across the disk read would block other callers.
+    Dict get and set are atomic, so the unlocked probe cannot corrupt ``_MEMORY``.
     """
     hit = _MEMORY.get(key)
     if hit and _fresh(hit[0], hit[1], ttl):

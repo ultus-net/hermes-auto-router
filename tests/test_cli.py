@@ -161,7 +161,7 @@ class StatusTest(unittest.TestCase):
         target_map.assert_called_once()
         self.assertIn("1/2 aliases resolve", text)
         self.assertIn("a/one-1", text)
-        self.assertIn("(no live target) ~b/two-latest", text)
+        self.assertIn("(no target in catalog) ~b/two-latest", text)
 
     def test_does_not_label_cached_catalog_data_as_live(self):
         # A cached failure serves an empty list for 60 seconds. status must not
@@ -169,7 +169,7 @@ class StatusTest(unittest.TestCase):
         code, text, _, _ = self.run_status(Settings(), [], {})
         self.assertEqual(code, 0)
         self.assertIn("synthetic      0 syn:* aliases", text)
-        self.assertNotIn("syn:* aliases live", text)
+        self.assertNotIn("live", text)
 
 
 if __name__ == "__main__":

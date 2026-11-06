@@ -85,7 +85,6 @@ class CachedTest(unittest.TestCase):
         catalog._refresh("k", 60, produce)
         self.assertEqual(catalog._cached("k", 60, produce), ["fresh"])
         self.assertEqual(produce.call_count, 1)
-        self.assertNotIn("k", catalog._REFRESHING)
 
 
 class RefreshTest(unittest.TestCase):
@@ -100,21 +99,29 @@ class RefreshTest(unittest.TestCase):
             self.addCleanup(patcher.stop)
 
     def test_refresh_is_single_flight_per_key(self):
-        produce = mock.Mock()
-        with mock.patch.object(catalog.threading, "Thread") as thread:
-            catalog._refresh_in_background("k", 60, produce)
-            catalog._refresh_in_background("k", 60, produce)
-        thread.assert_called_once()
-        thread.return_value.start.assert_called_once()
+        with mock.patch.object(catalog, "threading") as threading_module:
+            catalog._refresh_in_background("k", 60, mock.Mock())
+            catalog._refresh_in_background("k", 60, mock.Mock())
+        threading_module.Thread.assert_called_once()
+        threading_module.Thread.return_value.start.assert_called_once()
         self.assertIn("k", catalog._REFRESHING)
 
     def test_thread_start_failure_clears_the_marker(self):
-        with mock.patch.object(catalog.threading, "Thread") as thread:
-            thread.return_value.start.side_effect = RuntimeError("no threads")
+        with mock.patch.object(catalog, "threading") as threading_module:
+            threading_module.Thread.return_value.start.side_effect = RuntimeError("no threads")
             catalog._refresh_in_background("k", 60, mock.Mock())
         self.assertNotIn("k", catalog._REFRESHING)
 
+    def test_successful_refresh_clears_the_marker(self):
+        # The marker only exists while a refresh runs, so seed it: a bare
+        # assertNotIn would pass even if _refresh never discarded it.
+        catalog._REFRESHING.add("k")
+        catalog._refresh("k", 60, mock.Mock(return_value=["fresh"]))
+        self.assertNotIn("k", catalog._REFRESHING)
+        self.assertEqual(catalog._MEMORY["k"][1], ["fresh"])
+
     def test_failed_refresh_records_the_failure_and_clears_the_marker(self):
+        catalog._REFRESHING.add("k")
         produce = mock.Mock(side_effect=RuntimeError("catalog down"))
         with mock.patch.object(catalog.logger, "warning"):
             catalog._refresh("k", 60, produce)
