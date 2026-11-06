@@ -1,3 +1,14 @@
 __pycache__/
 *.pyc
 .venv/
+venv/
+
+# Never commit credentials. Keys live in $HERMES_HOME/.env, not here.
+.env
+.env.*
+*.env
+*.key
+*.pem
+
+.DS_Store
+*.log

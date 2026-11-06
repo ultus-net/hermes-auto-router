@@ -11,10 +11,15 @@ over to **OpenRouter's Auto Router** when Synthetic rate-limits.
   point at.
 * **No version pinning.** Both halves read the live catalogs.
 
-This is a Python port of [`ultus-net/opencode-auto-router`](https://github.com/ultus-net/opencode-auto-router)
-to Hermes' plugin contracts. The behaviour is the same; the wiring is not,
-because Hermes already owns two of the three jobs the OpenCode plugin had to
+This is a **Hermes Agent** plugin, not an OpenCode plugin. It is a separate
+repository from [`ultus-net/opencode-auto-router`](https://github.com/ultus-net/opencode-auto-router),
+which targets OpenCode's V2 plugin API. The behaviour is the same; the wiring is
+not, because Hermes already owns two of the three jobs the OpenCode plugin had to
 build by hand.
+
+Requires Hermes Agent with the `llm_request` middleware contract and
+model-provider plugin discovery (both present in 0.21+). Python 3.11, stdlib
+only: no dependencies to install.
 
 ## What it does
 
