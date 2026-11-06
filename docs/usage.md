@@ -17,6 +17,7 @@ hermes auto-router verify     # live completion on both routes
 | --- | --- |
 | `model.provider` | `synthetic` |
 | `model.default` | `syn:large:text` |
+| `model.base_url` | empty |
 | `model_aliases.syn:auto` | `{model: syn:large:text, provider: synthetic}` |
 | `fallback_providers` | `[{provider: openrouter, model: openrouter/auto}]` |
 | `model_overrides.synthetic` | per-alias context window, tools, vision, reasoning |
@@ -29,7 +30,7 @@ without applying them.
 
 `apply` fails closed: `set_config_value` raises on a rejected key, the command
 exits nonzero, and nothing retries. A failure mid-sequence leaves a partial
-policy, and the exception names the key that failed.
+policy.
 
 ## Configuration
 

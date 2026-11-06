@@ -47,11 +47,14 @@ hermes config set SYNTHETIC_API_KEY sk-...   # writes .env
 | General | repo root | `$HERMES_HOME/plugins/auto-router` | `PluginManager` |
 | Provider | `providers/synthetic/` | `$HERMES_HOME/plugins/model-providers/synthetic` | `providers/__init__.py` |
 
-Both are symlinks, so `hermes plugins update` (Option A) or `git pull`
-(Option B) is enough to upgrade. Restart the gateway afterwards.
+The provider half is a symlink. Option B also symlinks the general half; Option A
+leaves the real clone directory that `hermes plugins install` placed. Upgrade
+with `hermes plugins update` (Option A) or `git pull` (Option B), then restart
+the gateway.
 
-`install.sh` links the general half first and aborts on a conflict, so a real
-directory at either target is never replaced and never leaves the plugin half
-installed. It rejects unknown or extra arguments.
+`install.sh` links the general half first and aborts on a conflict. A conflict at
+the general target therefore stops before the provider half is touched; a
+conflict at the provider target leaves the general half linked. Either way a real
+directory is never replaced. The script rejects unknown or extra arguments.
 
 Back to [README](../README.md).
