@@ -50,7 +50,8 @@ An `llm_request` middleware resolves each alias to its current concrete slug
 (`alias_target.slug`) and injects that list into every `openrouter/auto`
 request. The pool is cached in-process and on disk for six hours, and warmed in
 a background thread at plugin load, so the request path never blocks on a
-catalog fetch.
+catalog fetch. An empty or failed lookup is cached for 60 seconds: an outage
+must not turn every request into another eight-second fetch.
 
 ### 3. Failover is Hermes' own
 
@@ -102,6 +103,9 @@ hermes config set SYNTHETIC_API_KEY sk-...   # writes .env
 # OPENROUTER_API_KEY is usually already set
 ```
 
+`verify` resolves both keys through Hermes' dotenv-aware lookup, so it reads
+`$HERMES_HOME/.env` even when the launching shell does not export them.
+
 ### What gets linked
 
 | Half | Source | Destination | Discovered by |
@@ -131,7 +135,8 @@ hermes auto-router verify     # live completion on both routes
 | `model_overrides.synthetic` | per-alias context window, tools, vision, reasoning |
 | `auxiliary.title_generation` | `synthetic` / `syn:small:text` |
 
-`--primary`, `--small`, `--no-default`, and `--dry-run` are available.
+`--primary` and `--small` default to the plugin settings, so the CLI and the
+runtime agree. `--no-default` and `--dry-run` are also available.
 
 ## Configuration
 
@@ -152,7 +157,8 @@ plugins:
 ```
 
 Settings are read at plugin load. Restart the gateway or start a new session
-after changing them.
+after changing them. `hermes auto-router apply` defaults `--primary` and
+`--small` to these values.
 
 ## Verify it's working
 
@@ -213,6 +219,9 @@ resolved to nothing, or OpenRouter ignored the request-level constraint. Check
 `hermes auto-router status`; if the pool is empty, every configured alias has no
 live target.
 
+**Stale pool after a model release** — the cache lives for six hours. Run
+`hermes auto-router status --refresh` to bypass both cache layers.
+
 **OpenRouter's "Prevent overrides" toggle must be OFF** at
 <https://openrouter.ai/settings/routing>. When it is ON, OpenRouter makes your
 saved account Auto Router values final and ignores request-level settings, so
@@ -227,8 +236,27 @@ enabled. If it is not, run `hermes plugins enable auto-router`.
 ## Tests
 
 ```bash
+make check   # Ruff + the suite; no Hermes install needed
+```
+
+Provider tests skip when Hermes Agent is not installed. To exercise the real
+provider contract, run the suite in the Hermes venv:
+
+```bash
 ~/.hermes/hermes-agent/venv/bin/python -m unittest discover -s tests -v
 ```
+
+## Development
+
+```bash
+python3.11 -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+make check
+```
+
+CI runs the same checks on Python 3.11 and enforces the allowed branch
+prefixes. Repo rules for agents live in [`AGENTS.md`](AGENTS.md), terms in
+[`GLOSSARY.md`](GLOSSARY.md), and changes in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## License
 

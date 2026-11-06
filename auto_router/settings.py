@@ -6,8 +6,9 @@ degrade the routing policy, not break the session.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 # Synthetic's permanent category aliases. The alias id is stable; Synthetic
 # rotates the model behind it, so nothing here pins a version.

@@ -1,5 +1,5 @@
 name: auto-router
-version: 1.0.0
+version: 1.1.0
 description: "Synthetic's permanent syn:* aliases as the primary provider, with OpenRouter's Auto Router as the failover. Resolves ~<lab>/<model>-latest aliases to concrete slugs and injects them as the Auto Router's allowed_models, which the aliases cannot match on their own."
 author: ultus-net
 license: MIT

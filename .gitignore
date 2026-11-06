@@ -3,6 +3,14 @@ __pycache__/
 .venv/
 venv/
 
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+*.egg-info/
+
 # Never commit credentials. Keys live in $HERMES_HOME/.env, not here.
 .env
 .env.*

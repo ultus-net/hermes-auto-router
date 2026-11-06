@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from auto_router.pool import (  # noqa: E402
+from auto_router.pool import (
     alias_targets,
     auto_router_entry,
     inject,

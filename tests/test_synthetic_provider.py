@@ -7,12 +7,14 @@ same ``register_provider`` call the discovery path makes.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-HERMES_SRC = Path.home() / ".hermes" / "hermes-agent"
+HERMES_HOME = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+HERMES_SRC = HERMES_HOME / "hermes-agent"
 for path in (str(HERMES_SRC), str(ROOT)):
     if path not in sys.path:
         sys.path.insert(0, path)
@@ -21,6 +23,11 @@ PROVIDER = ROOT / "providers" / "synthetic" / "__init__.py"
 
 
 def load_provider():
+    # The provider imports Hermes' own `providers` package. A bare checkout
+    # (CI, a docs machine) has no Hermes install. Detect that up front so a real
+    # import error inside Hermes still fails the suite instead of skipping it.
+    if not (HERMES_SRC / "providers" / "__init__.py").is_file():
+        raise unittest.SkipTest(f"Hermes Agent is not installed at {HERMES_SRC}")
     spec = importlib.util.spec_from_file_location("auto_router_synthetic_provider", PROVIDER)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
