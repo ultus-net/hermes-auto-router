@@ -78,13 +78,11 @@ hermes plugins install ultus-net/hermes-auto-router
 # into plugins/auto-router, but providers are discovered from
 # plugins/model-providers/<name>/, so this step is required.
 "${HERMES_HOME:-$HOME/.hermes}/plugins/auto-router/install.sh"
-
-hermes plugins enable auto-router
 ```
 
 `install.sh` detects that it is running from the installed copy, links only the
-provider half, and leaves the general half where `hermes plugins install` put
-it. Re-run it after `hermes plugins update`.
+provider half, leaves the general half where `hermes plugins install` put it,
+and enables the plugin. Re-run it after `hermes plugins update`.
 
 ### Option B — from a clone (development)
 
