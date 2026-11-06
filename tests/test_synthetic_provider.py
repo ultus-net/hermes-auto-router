@@ -68,11 +68,11 @@ class ProfileTest(unittest.TestCase):
             profile = get_provider_profile(name)
             self.assertIsNotNone(profile, name)
             self.assertEqual(profile.name, "synthetic")
-            self.assertEqual(profile.base_url, "https://api.synthetic.new/v1")
+            self.assertEqual(profile.base_url, "https://api.synthetic.new/openai/v1")
 
     def test_points_at_the_openai_compatible_endpoint(self):
-        self.assertEqual(self.profile.base_url, "https://api.synthetic.new/v1")
-        self.assertEqual(self.profile.models_url, "https://api.synthetic.new/v1/models")
+        self.assertEqual(self.profile.base_url, "https://api.synthetic.new/openai/v1")
+        self.assertEqual(self.profile.models_url, "https://api.synthetic.new/openai/v1/models")
         self.assertEqual(self.profile.env_vars[0], "SYNTHETIC_API_KEY")
 
     def test_aux_models_track_the_vision_split(self):

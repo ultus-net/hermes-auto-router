@@ -28,7 +28,7 @@ from .settings import (
     Settings,
 )
 
-SYNTHETIC_BASE_URL = "https://api.synthetic.new/v1"
+SYNTHETIC_BASE_URL = "https://api.synthetic.new/openai/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Used only when the live Synthetic catalog is unreachable during ``apply``.

@@ -27,7 +27,7 @@ from providers.base import ProviderProfile
 
 logger = logging.getLogger(__name__)
 
-MODELS_URL = "https://api.synthetic.new/v1/models"
+MODELS_URL = "https://api.synthetic.new/openai/v1/models"
 ALIAS_PREFIX = "syn:"
 CACHE_TTL_SECONDS = 6 * 60 * 60
 
@@ -107,7 +107,7 @@ synthetic = SyntheticProfile(
     description="Synthetic — permanent syn:* category aliases (auto-rotating models)",
     signup_url="https://synthetic.new",
     env_vars=("SYNTHETIC_API_KEY", "SYNTHETIC_BASE_URL"),
-    base_url="https://api.synthetic.new/v1",
+    base_url="https://api.synthetic.new/openai/v1",
     models_url=MODELS_URL,
     auth_type="api_key",
     supports_vision=True,
