@@ -22,8 +22,8 @@ from typing import Any
 
 from . import catalog
 from .credentials import api_key
-from .pool import AUTO_ROUTER_MODEL, auto_router_entry
-from .settings import DEFAULT_PRIMARY_MODEL, DEFAULT_SMALL_MODEL, Settings
+from .pool import AUTO_ROUTER_MODEL, auto_router_entry, resolve_pool
+from .settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -76,12 +76,12 @@ def register_cli(subparser: argparse.ArgumentParser) -> None:
     apply_cmd.add_argument(
         "--primary",
         default=None,
-        help=f"Primary syn:* alias (default: the plugin setting, {DEFAULT_PRIMARY_MODEL})",
+        help="Primary syn:* alias (default: the configured primary_model)",
     )
     apply_cmd.add_argument(
         "--small",
         default=None,
-        help=f"Small/aux syn:* alias (default: the plugin setting, {DEFAULT_SMALL_MODEL})",
+        help="Small/aux syn:* alias (default: the configured small_model)",
     )
     apply_cmd.add_argument(
         "--no-default",
@@ -235,7 +235,7 @@ def _status(args: argparse.Namespace) -> int:
     print()
 
     try:
-        aliases = catalog.synthetic_aliases()
+        aliases = catalog.synthetic_aliases(refresh=args.refresh)
         print(f"synthetic      {len(aliases)} syn:* aliases live")
         for alias in aliases:
             print(f"  {alias}")
@@ -245,7 +245,7 @@ def _status(args: argparse.Namespace) -> int:
 
     try:
         targets = catalog.alias_target_map(refresh=args.refresh)
-        pool = catalog.resolved_pool(settings.aliases, refresh=args.refresh)
+        pool = resolve_pool(settings.aliases, targets)
         print(f"openrouter     {len(pool)}/{len(settings.aliases)} aliases resolve")
         for slug in pool:
             print(f"  {slug}")
@@ -304,15 +304,15 @@ def _apply(args: argparse.Namespace) -> int:
     return 0
 
 
-def _check_synthetic_catalog() -> int:
+def _check_synthetic_catalog(refresh: bool) -> int:
     print("1. Synthetic catalog")
     try:
-        aliases = catalog.synthetic_aliases()
+        aliases = catalog.synthetic_aliases(refresh=refresh)
     except Exception as exc:
         print(f"   ✗ unreachable: {exc}")
         return 1
     print(f"   ✓ {len(aliases)} syn:* aliases: {', '.join(aliases) or '(none)'}")
-    return 0
+    return 0 if aliases else 1
 
 
 def _check_pool(settings: Settings, refresh: bool) -> tuple[list[str], int]:
@@ -370,7 +370,7 @@ def _check_openrouter_completion(settings: Settings, pool: list[str], timeout: f
 
 def _verify(args: argparse.Namespace) -> int:
     settings = _settings()
-    failures = _check_synthetic_catalog()
+    failures = _check_synthetic_catalog(args.refresh)
     pool, pool_failures = _check_pool(settings, args.refresh)
     failures += (
         pool_failures

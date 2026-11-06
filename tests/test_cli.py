@@ -65,8 +65,13 @@ class ApplyTest(unittest.TestCase):
     def test_no_default_leaves_the_model_keys_alone(self):
         self.assertEqual(self.run_apply(namespace(no_default=True)), 0)
         writes = self.writes()
-        self.assertNotIn("model.provider", writes)
-        self.assertNotIn("model.default", writes)
+        for key in (
+            "model.provider",
+            "model.default",
+            "model.base_url",
+            "model_aliases.syn:auto",
+        ):
+            self.assertNotIn(key, writes)
         self.assertIn("fallback_providers", writes)
 
     def test_rejects_non_syn_aliases(self):
@@ -108,6 +113,23 @@ class ApiKeyTest(unittest.TestCase):
         modules = mock.patch.dict(sys.modules, {"agent.credential_pool": None})
         with modules, mock.patch.dict("os.environ", {}, clear=True):
             self.assertEqual(credentials.api_key("SYNTHETIC_API_KEY"), "")
+
+
+class VerifyCatalogTest(unittest.TestCase):
+    def run_check(self, aliases):
+        with (
+            mock.patch.object(cli.catalog, "synthetic_aliases", return_value=aliases),
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            return cli._check_synthetic_catalog(refresh=False)
+
+    def test_live_synthetic_catalog_passes(self):
+        self.assertEqual(self.run_check(["syn:large:text"]), 0)
+
+    def test_empty_synthetic_catalog_fails(self):
+        # An empty list is also how a cached failure is served for 60 seconds.
+        # verify must not report success in that window.
+        self.assertEqual(self.run_check([]), 1)
 
 
 if __name__ == "__main__":

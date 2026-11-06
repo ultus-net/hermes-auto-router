@@ -21,6 +21,11 @@ EOF
 }
 
 enable=1
+if [[ $# -gt 1 ]]; then
+  echo "too many arguments" >&2
+  usage >&2
+  exit 2
+fi
 case "${1:-}" in
   "") ;;
   --no-enable) enable=0 ;;
@@ -53,13 +58,14 @@ link_dir() {
     if [[ "$(cd "$dest" && pwd -P)" == "$(cd "$src" && pwd -P)" ]]; then
       echo "$label already in place: $dest"
     else
-      echo "warning: $dest exists and is not a symlink; leaving it alone" >&2
+      echo "error: $dest exists and is not a symlink; refusing to replace it" >&2
+      return 1
     fi
     return
   fi
   if [[ -e "$dest" ]]; then
-    echo "warning: $dest exists and is not a directory; leaving it alone" >&2
-    return
+    echo "error: $dest exists and is not a directory; refusing to replace it" >&2
+    return 1
   fi
   ln -sfn "$src" "$dest"
   echo "linked $label: $dest -> $src"

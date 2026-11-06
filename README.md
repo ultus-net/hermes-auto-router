@@ -48,10 +48,12 @@ collapses to zero and every request fails:
 
 An `llm_request` middleware resolves each alias to its current concrete slug
 (`alias_target.slug`) and injects that list into every `openrouter/auto`
-request. The pool is cached in-process and on disk for six hours, and warmed in
-a background thread at plugin load, so the request path never blocks on a
-catalog fetch. An empty or failed lookup is cached for 60 seconds: an outage
-must not turn every request into another eight-second fetch.
+request. The alias target map is cached in-process and on disk for six hours,
+and warmed in a background thread at plugin load. The request path never
+fetches: on a cold or expired cache it uses the stale map when one exists,
+otherwise it leaves the router unconstrained for that call and refreshes in a
+background thread. An empty or failed lookup is cached for 60 seconds, so an
+outage does not turn every request into another eight-second fetch.
 
 ### 3. Failover is Hermes' own
 
@@ -220,7 +222,8 @@ resolved to nothing, or OpenRouter ignored the request-level constraint. Check
 live target.
 
 **Stale pool after a model release** — the cache lives for six hours. Run
-`hermes auto-router status --refresh` to bypass both cache layers.
+`hermes auto-router status --refresh` to bypass both cache layers for both
+catalogs.
 
 **OpenRouter's "Prevent overrides" toggle must be OFF** at
 <https://openrouter.ai/settings/routing>. When it is ON, OpenRouter makes your

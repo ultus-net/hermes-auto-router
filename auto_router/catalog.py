@@ -8,10 +8,13 @@ on the request hot path, so results are cached twice:
   CLI invocation, a restarted gateway) does not pay a network round-trip before
   its first request.
 
-A cold cache never blocks a request: the request path takes the cache lock
-without waiting, so it returns ``[]`` while another thread fetches. The Auto
-Router then runs unconstrained for that one call, and the next call is
-constrained.
+Cached values are the two catalogs themselves: the Synthetic alias list and the
+OpenRouter alias target map. The Auto Router pool is a pure function of the
+target map, so it is recomputed per call instead of cached a third time.
+
+The request path never fetches. On a cold or expired cache it serves the stale
+value if one exists, otherwise ``[]``, and schedules a daemon refresh. The Auto
+Router runs unconstrained for that one call, and the next call is constrained.
 
 Empty results are cached too, for ``NEGATIVE_TTL_SECONDS``. Without that, a
 catalog outage or an empty pool would turn every ``openrouter/auto`` request
@@ -20,7 +23,6 @@ into another eight-second fetch.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import threading
@@ -38,6 +40,7 @@ OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 SYNTHETIC_MODELS_URL = "https://api.synthetic.new/openai/v1/models"
 SYNTHETIC_ALIAS_PREFIX = "syn:"
 ALIAS_TARGETS_KEY = "openrouter-alias-targets"
+SYNTHETIC_ALIASES_KEY = "synthetic-aliases"
 
 DEFAULT_TTL_SECONDS = 6 * 60 * 60
 DEFAULT_TIMEOUT_SECONDS = 8.0
@@ -45,6 +48,8 @@ NEGATIVE_TTL_SECONDS = 60.0
 
 _MEMORY: dict[str, tuple[float, Any]] = {}
 _LOCK = threading.Lock()
+_REFRESH_LOCK = threading.Lock()
+_REFRESHING: set[str] = set()
 _MISSING = object()
 
 
@@ -99,6 +104,59 @@ def _write_disk(key: str, value: Any) -> None:
         logger.debug("auto-router: catalog cache write failed: %s", exc)
 
 
+def _load(key: str, ttl: float, produce: Callable[[], Any], *, refresh: bool) -> Any:
+    """Return the cached value or produce a new one. The caller holds ``_LOCK``."""
+    if not refresh:
+        hit = _MEMORY.get(key)
+        if hit and _fresh(hit[0], hit[1], ttl):
+            return hit[1]
+        disk = _read_disk(key, ttl)
+        if disk is not _MISSING:
+            _MEMORY[key] = (time.time(), disk)
+            return disk
+    try:
+        value = produce()
+    except Exception:
+        # Record the failure before re-raising so the next caller does not
+        # repeat the network call inside the negative TTL window.
+        _MEMORY[key] = (time.time(), [])
+        _write_disk(key, [])
+        raise
+    _MEMORY[key] = (time.time(), value)
+    _write_disk(key, value)
+    return value
+
+
+def _refresh(key: str, ttl: float, produce: Callable[[], Any]) -> None:
+    try:
+        with _LOCK:
+            _load(key, ttl, produce, refresh=False)
+    except Exception as exc:
+        logger.debug("auto-router: background catalog refresh failed: %s", exc)
+    finally:
+        with _REFRESH_LOCK:
+            _REFRESHING.discard(key)
+
+
+def _refresh_in_background(key: str, ttl: float, produce: Callable[[], Any]) -> None:
+    """Refresh *key* off the request path, at most once at a time."""
+    with _REFRESH_LOCK:
+        if key in _REFRESHING:
+            return
+        _REFRESHING.add(key)
+    try:
+        threading.Thread(
+            target=_refresh,
+            args=(key, ttl, produce),
+            name="auto-router-catalog-refresh",
+            daemon=True,
+        ).start()
+    except Exception as exc:
+        logger.warning("auto-router: could not start catalog refresh: %s", exc)
+        with _REFRESH_LOCK:
+            _REFRESHING.discard(key)
+
+
 def _cached(
     key: str,
     ttl: float,
@@ -109,12 +167,10 @@ def _cached(
 ) -> Any:
     """Return the cached value for *key*, calling *produce* on a miss.
 
-    ``blocking=False`` never waits for another thread's fetch; it returns
-    ``_MISSING`` instead so the caller can degrade to an unconstrained request.
+    ``blocking=False`` never calls *produce*. It returns the stale value when
+    one exists, otherwise ``_MISSING``, and schedules a daemon refresh. Callers
+    on the request path use this mode.
     ``refresh=True`` skips both cache layers and overwrites them.
-
-    A failed *produce* records an empty value before re-raising, so the next
-    caller does not repeat the network call inside the negative TTL window.
     """
     if not refresh:
         hit = _MEMORY.get(key)
@@ -124,30 +180,12 @@ def _cached(
         if disk is not _MISSING:
             _MEMORY[key] = (time.time(), disk)
             return disk
-
-    if not _LOCK.acquire(blocking=blocking):
+    if not blocking:
         hit = _MEMORY.get(key)
+        _refresh_in_background(key, ttl, produce)
         return hit[1] if hit else _MISSING
-    try:
-        if not refresh:
-            hit = _MEMORY.get(key)
-            if hit and _fresh(hit[0], hit[1], ttl):
-                return hit[1]
-            disk = _read_disk(key, ttl)
-            if disk is not _MISSING:
-                _MEMORY[key] = (time.time(), disk)
-                return disk
-        try:
-            value = produce()
-        except Exception:
-            _MEMORY[key] = (time.time(), [])
-            _write_disk(key, [])
-            raise
-        _MEMORY[key] = (time.time(), value)
-        _write_disk(key, value)
-        return value
-    finally:
-        _LOCK.release()
+    with _LOCK:
+        return _load(key, ttl, produce, refresh=refresh)
 
 
 def fetch_json(url: str, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> Any:
@@ -172,7 +210,10 @@ def synthetic_models(timeout: float = DEFAULT_TIMEOUT_SECONDS) -> list[dict[str,
 
 
 def synthetic_aliases(
-    timeout: float = DEFAULT_TIMEOUT_SECONDS, *, ttl: float = DEFAULT_TTL_SECONDS
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    *,
+    ttl: float = DEFAULT_TTL_SECONDS,
+    refresh: bool = False,
 ) -> list[str]:
     """The ``syn:*`` ids Synthetic currently publishes, in catalog order."""
 
@@ -188,7 +229,7 @@ def synthetic_aliases(
                 out.append(model_id)
         return out
 
-    aliases = _cached("synthetic-aliases", ttl, produce)
+    aliases = _cached(SYNTHETIC_ALIASES_KEY, ttl, produce, refresh=refresh)
     return aliases if isinstance(aliases, list) else []
 
 
@@ -218,32 +259,19 @@ def resolved_pool(
     refresh: bool = False,
     blocking: bool = True,
 ) -> list[str]:
-    """Concrete slugs for *aliases*, cached per alias set.
+    """Concrete slugs for *aliases*.
 
-    The target map is resolved before the pool cache lock is taken. Resolving it
-    inside the pool's ``produce`` callback would re-enter the same lock and
-    deadlock.
+    The pool is a pure function of the cached target map, so it is not cached
+    separately. With ``blocking=False`` the map may be stale or unavailable;
+    either way this returns without fetching.
     """
-    aliases = tuple(aliases or ())
     targets = alias_target_map(timeout=timeout, ttl=ttl, refresh=refresh, blocking=blocking)
-    if not targets and not blocking:
-        # Another thread holds the cache lock and is fetching the catalog. Do
-        # not cache this empty pool: the fetch in flight will fill the cache.
-        return []
-    digest = hashlib.sha256(",".join(aliases).encode("utf-8")).hexdigest()[:16]
-    pool = _cached(
-        "pool:" + digest,
-        ttl,
-        lambda: resolve_pool(aliases, targets),
-        blocking=blocking,
-        refresh=refresh,
-    )
-    return pool if isinstance(pool, list) else []
+    return resolve_pool(tuple(aliases or ()), targets)
 
 
 def warm(aliases: list[str] | tuple[str, ...]) -> None:
-    """Populate the pool cache off the request path. Never raises."""
+    """Populate the target-map cache off the request path. Never raises."""
     try:
         resolved_pool(aliases)
     except Exception as exc:
-        logger.debug("auto-router: pool warm failed: %s", exc)
+        logger.debug("auto-router: catalog warm failed: %s", exc)
