@@ -1,16 +1,21 @@
 """hermes-auto-router — Synthetic primary, OpenRouter Auto Router failover.
 
-Two capabilities ride in this plugin:
+Three capabilities ride in this plugin:
 
-1. **Auto Router constraint** (this package). ``llm_request`` middleware resolves
-   the configured ``~<lab>/<model>-latest`` aliases to the concrete slugs they
-   currently point at and injects them as ``plugins[auto-router].allowed_models``
-   on every ``openrouter/auto`` request. Without it the aliases match nothing
-   inside ``allowed_models`` and the router 404s.
+1. **Auto Router constraint** (``auto_router/``). ``llm_request`` middleware
+   resolves the configured ``~<lab>/<model>-latest`` aliases to the concrete
+   slugs they currently point at and injects them as
+   ``plugins[auto-router].allowed_models`` on every ``openrouter/auto`` request.
+   Without it the aliases match nothing inside ``allowed_models`` and the router
+   404s.
 
 2. **Synthetic provider** (``providers/synthetic/``). A model-provider plugin
    that registers Synthetic's permanent ``syn:*`` category aliases, which are
    absent from models.dev and therefore invisible to Hermes otherwise.
+
+3. **Mail organiser** (``mail_organiser/``). The durable mail seam: a journalled
+   state machine, a deterministic rule engine, the policy gate, and the provider
+   adapters. Phase 1 attaches the store and registers no command or tool.
 
 Cross-provider failover is Hermes' own ``fallback_providers`` chain, written by
 ``hermes auto-router apply``. A plugin cannot redirect an in-flight request, and
@@ -25,8 +30,28 @@ import threading
 
 logger = logging.getLogger(__name__)
 
+#: The plugin id in log lines. The D11 rename changes it with the manifest.
+PLUGIN_ID = "auto-router"
+
 
 def register(ctx) -> None:
+    """Register every seam behind its own guard, routing first.
+
+    A session with no routing is broken and a session with no mail is not, so
+    the router registers first. A mail failure logs with the plugin id and
+    disables mail only; Hermes disposes every registration when ``register()``
+    itself raises.
+    """
+    _register_router(ctx)
+    try:
+        from .mail_organiser import register as register_mail
+
+        register_mail(ctx)
+    except Exception:
+        logger.exception("%s: mail seam unavailable; routing stays registered", PLUGIN_ID)
+
+
+def _register_router(ctx) -> None:
     from .auto_router import catalog
     from .auto_router.cli import handle, register_cli
     from .auto_router.middleware import configure, on_llm_request

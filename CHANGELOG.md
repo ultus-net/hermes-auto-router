@@ -6,10 +6,59 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `mail_organiser/models.py` and `mail_organiser/store.py` begin the mail seam:
+  frozen boundary values, the eight-state journal, an atomic page commit that
+  advances the listing cursor only with the journal, fenced mailbox leases,
+  single-use decisions with expiry in the predicate, precedence-ordered rules,
+  and canonical sensitive-folder keys that survive case, width, and nesting.
+- `mail_organiser/rules.py` adds the deterministic matcher, the operator 40 /
+  learned 30 / classifier 20 precedence, learning from two corrections of one
+  key, the suggestions listing and dismissal, and rule deletion with an undo
+  receipt that re-links only rows still unclaimed.
+- `mail_organiser/policy.py` adds the four-behaviour defaults per profile and
+  the single `apply_gate()` checked before provider access. It refuses a paused
+  mailbox, journals dry runs, queues `ask` and `handoff`, blocks a `block`, and
+  keeps `sensitive` folders out of the classifier's reach. Filing stays
+  disabled until a taxonomy row is approved.
+- `mail_organiser/mailbox.py` defines the provider Protocol and
+  `mail_organiser/fake.py` implements it in memory, including folders, a stable
+  lookup, and injectable failures and unknown outcomes.
+- `mail_organiser/sweep.py` replays durable rows first, then lists bounded pages
+  and journals each page with the cursor it returns. It gates every row before
+  the provider call and journals the outcome. Three consecutive failures stop
+  the batch, three failed attempts become a decision, and a dry run settles
+  instead of stalling. The sweep refuses to journal a page whose mailbox does
+  not match the mailbox being swept.
+- The D14 names are sensitive before any mailbox seeds its keys, and a taxonomy
+  write now advances `mail_mailboxes.taxonomy_version` so staleness is
+  detectable. Rule writes advance `ruleset_generation`.
+- `mail_organiser.register(ctx)` attaches the store through Hermes'
+  `plugin_db("hermes-personal")` and applies the schema manifest. The store name
+  is the post-rename name from D11, so the database survives that rename. Hermes
+  opens the connection with `row_factory=None`, so the attach sets
+  `sqlite3.Row` before any query runs.
+- The root `register(ctx)` registers each seam behind its own guard, router
+  first. A mail import or attach failure logs with the plugin id and disables
+  mail only, so routing still loads on a host with no mail storage.
+- `tests/test_isolation.py` proves both halves of the isolation contract. It
+  scans every seam for a cross-seam import and the mail root for a module-scope
+  local import, both of which run without Hermes. Driven through Hermes' real
+  deadline loader, it also asserts that a mail failure stays local and that a
+  mail import past `plugins.load_timeout_seconds` abandons every registration.
+  `tests/test_mail_attach.py` drives the attach through a fake
+  `plugins.plugin_storage` with Hermes' signature and `row_factory=None`.
+
 ### Changed
 
 - The README is split into a short landing page plus `docs/`, so the install,
   usage, verification, troubleshooting, and development detail has a home.
+- Ruff's `known-first-party` now includes `mail_organiser`, so the seam's
+  imports sort as first-party rather than third-party.
+- `AGENTS.md`, `GLOSSARY.md`, and `docs/architecture.md` document the third seam,
+  its guard, and the no-cross-seam import rule. `docs/development.md` names what
+  each mail test file covers.
 
 ### Fixed
 
