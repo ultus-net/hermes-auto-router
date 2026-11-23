@@ -2,6 +2,23 @@
 
 Two plugin halves, because Hermes discovers them through two different systems.
 They install independently, so neither may depend on the other's import graph.
+One more seam, the mail organiser, rides inside the general plugin.
+
+## 0. Seams and their guards
+
+A seam is one independently registerable part of the plugin. Each one registers
+inside its own guard in the root `register(ctx)`, and the router registers first:
+a session with no routing is broken and a session with no mail is not.
+
+The root package stays import-light. Every seam imports lazily inside its own
+guard, so a mail import error, a missing mail dependency, or a raising mail
+`register()` logs with the plugin id and disables mail only. Hermes still
+disposes every registration when `register()` itself raises, or when a load
+overruns `plugins.load_timeout_seconds`. That is why the guard, not a retry, is
+the routing protection: one plugin load, one deadline.
+
+No seam imports another. A shared helper waits for a third real use in a
+`personal_core` package.
 
 ## 1. `providers/synthetic/` — the Synthetic provider
 
@@ -44,6 +61,29 @@ re-resolves reasoning effort, and restores the primary on the next turn.
 So `hermes auto-router apply` writes the chain instead of re-implementing it.
 Re-implementing would fight the runtime's retry, cooldown, and per-turn
 restoration logic.
+
+## 4. `mail_organiser/` — the mail seam
+
+The mail seam owns one SQLite database from
+`plugin_db("hermes-personal")`, so mail state survives a plugin update or
+removal and never lands in the plugin tree. The store name is deliberately the
+post-rename name from D11, so the data survives that rename too.
+
+Phase 1 ships the durable half and no user-facing surface: the eight-state
+journal, the rule engine with one precedence column, the four-behaviour policy
+gate, and an in-memory provider for the suite. `register(ctx)` applies the schema
+manifest and registers no command or tool.
+
+The invariants the rest of the seam depends on:
+
+| Invariant | Enforced by |
+| --- | --- |
+| The cursor advances only with a journalled page | one transaction in `store.commit_page` |
+| A decision is single-use and expires | the resolve predicate includes `expires_at` |
+| One sweep per mailbox | a fenced lease with a takeover counter |
+| Operator 40 > learned 30 > classifier 20 | one rank column, one ordering |
+| A sensitive folder stays out of the classifier's reach | the gate, keyed on canonical D14 identity |
+| Filing waits for an approved taxonomy | the gate, before any provider call |
 
 ## Cache layers
 

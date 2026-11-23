@@ -373,6 +373,25 @@ def initialize(conn: sqlite3.Connection) -> None:
         )
 
 
+def attach_plugin_store(name: str = "hermes-personal", *, filename: str = "data.db") -> sqlite3.Connection:
+    """Open the durable plugin database and apply the manifest.
+
+    Hermes owns the path and the connection lifetime. The import stays inside
+    this function so the seam imports without Hermes installed, and a store
+    failure reaches the caller's guard rather than the import machinery.
+
+    Hermes opens the connection with ``row_factory=None``. Every query here
+    reads columns by name, so the factory is set before any statement runs.
+    """
+
+    from plugins.plugin_storage import plugin_db
+
+    conn = plugin_db(name, filename)
+    conn.row_factory = sqlite3.Row
+    initialize(conn)
+    return conn
+
+
 def schema_manifest(conn: sqlite3.Connection) -> list[str]:
     """The live tables and indexes, for the restore comparison."""
 

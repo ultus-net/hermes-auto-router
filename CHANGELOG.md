@@ -34,11 +34,31 @@ All notable changes to this project are recorded here. The format follows
 - The D14 names are sensitive before any mailbox seeds its keys, and a taxonomy
   write now advances `mail_mailboxes.taxonomy_version` so staleness is
   detectable. Rule writes advance `ruleset_generation`.
+- `mail_organiser.register(ctx)` attaches the store through Hermes'
+  `plugin_db("hermes-personal")` and applies the schema manifest. The store name
+  is the post-rename name from D11, so the database survives that rename. Hermes
+  opens the connection with `row_factory=None`, so the attach sets
+  `sqlite3.Row` before any query runs.
+- The root `register(ctx)` registers each seam behind its own guard, router
+  first. A mail import or attach failure logs with the plugin id and disables
+  mail only, so routing still loads on a host with no mail storage.
+- `tests/test_isolation.py` proves both halves of the isolation contract. It
+  scans every seam for a cross-seam import and the mail root for a module-scope
+  local import, both of which run without Hermes. Driven through Hermes' real
+  deadline loader, it also asserts that a mail failure stays local and that a
+  mail import past `plugins.load_timeout_seconds` abandons every registration.
+  `tests/test_mail_attach.py` drives the attach through a fake
+  `plugins.plugin_storage` with Hermes' signature and `row_factory=None`.
 
 ### Changed
 
 - The README is split into a short landing page plus `docs/`, so the install,
   usage, verification, troubleshooting, and development detail has a home.
+- Ruff's `known-first-party` now includes `mail_organiser`, so the seam's
+  imports sort as first-party rather than third-party.
+- `AGENTS.md`, `GLOSSARY.md`, and `docs/architecture.md` document the third seam,
+  its guard, and the no-cross-seam import rule. `docs/development.md` names what
+  each mail test file covers.
 
 ### Fixed
 
