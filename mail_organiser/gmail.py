@@ -145,15 +145,31 @@ def _encode_cursor(kind: str, **fields: Any) -> str:
     return json.dumps({"kind": kind, **fields}, sort_keys=True, separators=(",", ":"))
 
 
+#: The fields each cursor kind must carry before a dispatch can read them.
+_CURSOR_FIELDS: dict[str, tuple[str, ...]] = {
+    "page": (),
+    "history": ("history_id",),
+    "history_page": ("start",),
+}
+
+
 def _decode_cursor(cursor: str) -> dict[str, Any]:
     try:
         data = json.loads(cursor)
     except json.JSONDecodeError:
         return {"kind": "history", "history_id": cursor}
-    if isinstance(data, str | int):
+    if isinstance(data, (str, int)):
         return {"kind": "history", "history_id": str(data)}
     if not isinstance(data, dict) or "kind" not in data:
         raise GmailError(f"invalid cursor: {cursor!r}")
+
+    kind = data["kind"]
+    required = _CURSOR_FIELDS.get(kind) if isinstance(kind, str) else None
+    if required is None:
+        raise GmailError(f"unknown cursor kind: {kind!r}")
+    missing = [key for key in required if key not in data]
+    if missing:
+        raise GmailError(f"cursor {kind!r} is missing {', '.join(missing)}")
     return data
 
 

@@ -134,6 +134,13 @@ class ListingTest(unittest.TestCase):
 
         self.assertEqual(self.transport.calls, [])
 
+    def test_a_cursor_missing_its_required_field_is_refused(self) -> None:
+        for cursor in ({"kind": "history"}, {"kind": "history_page"}, {"kind": ["history"]}):
+            with self.subTest(cursor=cursor), self.assertRaises(GmailError):
+                self.adapter.list_since(json.dumps(cursor), 10, Scope.INBOX)
+
+        self.assertEqual(self.transport.calls, [])
+
     def test_a_provider_error_carries_its_status(self) -> None:
         transport = GmailTransport(
             {

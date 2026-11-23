@@ -11,12 +11,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mail_organiser import store
 from mail_organiser.fake import FakeMailbox
+from mail_organiser.mailbox import CursorExpired
 from mail_organiser.models import (
     PERSONAL_DEFAULTS,
     WORK_DEFAULTS,
     Decision,
     Folder,
     Message,
+    Page,
     Ref,
     Scope,
     Verb,
@@ -151,6 +153,33 @@ class SweepTest(Base):
         self.assertEqual(report.applied, 1)
         self.assertEqual(store.message_row(self.conn, "personal", "m1")["state"], "confirmed")
         self.assertEqual(len(adapter.applied), 1)
+
+    def test_an_expired_cursor_resyncs_and_keeps_the_replacement(self) -> None:
+        class ExpiredMailbox(FakeMailbox):
+            def list_since(self, cursor, limit, scope):
+                if cursor is not None:
+                    raise CursorExpired("older than the retention window")
+                return super().list_since(cursor, limit, scope)
+
+        self.add_rule()
+        adapter = ExpiredMailbox([message("m1")])
+
+        report = self.sweep(adapter)
+
+        self.assertEqual(report.listed, 1)
+        self.assertEqual(report.applied, 1)
+        self.assertEqual(store.mailbox(self.conn, "personal").cursor, "1")
+
+    def test_a_resync_that_returns_another_scope_stops_the_sweep(self) -> None:
+        class WrongScope(FakeMailbox):
+            def list_since(self, cursor, limit, scope):
+                raise CursorExpired("older than the retention window")
+
+            def resync(self, scope, limit):
+                return Page(messages=(), scope=Scope.ARCHIVE, next_cursor="archive")
+
+        with self.assertRaises(SweepError):
+            self.sweep(WrongScope([message("m1")]))
 
     def test_a_paused_mailbox_lists_nothing(self) -> None:
         self.add_rule()
