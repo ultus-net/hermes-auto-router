@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from . import policy, rules, store
+from .mailbox import CursorExpired
 from .models import (
     FINAL_STATES,
     Decision,
@@ -56,6 +57,7 @@ COUNTER_FIELDS: tuple[str, ...] = (
     "waiting",
     "unknown",
     "unmatched",
+    "taxonomy_missing",
     "errors",
 )
 
@@ -82,6 +84,7 @@ class SweepReport:
     waiting: int = 0
     unknown: int = 0
     unmatched: int = 0
+    taxonomy_missing: int = 0
     errors: int = 0
     stopped: str | None = None
 
@@ -96,6 +99,7 @@ class SweepReport:
             (self.blocked, "blocked"),
             (self.retryable, "retryable"),
             (self.unmatched, "unmatched"),
+            (self.taxonomy_missing, "taxonomy missing"),
             (self.errors, "errors"),
         ):
             if count:
@@ -212,7 +216,7 @@ def _run(
 
     cursor = box.cursor
     while processed < limits.per_mailbox:
-        page = adapter.list_since(cursor, limits.page, Scope.INBOX)
+        page = _open_page(adapter, cursor, limits.page)
         if page.scope is not Scope.INBOX:
             raise SweepError(f"adapter returned {page.scope} for an inbox sweep")
         if not page.messages:
@@ -274,6 +278,22 @@ def _run(
 def _not_due(row: sqlite3.Row, moment: datetime) -> bool:
     retry_after = row["retry_after"]
     return retry_after is not None and retry_after > store.iso(moment)
+
+
+def _open_page(adapter: Any, cursor: str | None, limit: int) -> Any:
+    """List one inbox page, answering an expired cursor with one resync.
+
+    N9: the resync returns the replacement cursor, so the frontier moves
+    forward instead of stalling on a gap older than the provider's window.
+    """
+
+    try:
+        return adapter.list_since(cursor, limit, Scope.INBOX)
+    except CursorExpired:
+        page = adapter.resync(Scope.INBOX, limit)
+        if page.scope is not Scope.INBOX:
+            raise SweepError(f"resync returned {page.scope} for an inbox sweep") from None
+        return page
 
 
 def _decide(
@@ -369,6 +389,8 @@ def _settle(
             tally["dry_run"] += 1
         elif gate.reason == "policy_block":
             tally["blocked"] += 1
+        elif gate.reason == "taxonomy_not_approved":
+            tally["taxonomy_missing"] += 1
         if gate.reason in ASK_REASONS:
             _queue(conn, account, row, decision, moment)
             tally["queued"] += 1

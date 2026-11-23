@@ -265,5 +265,48 @@ class FakeMailboxTest(unittest.TestCase):
         self.assertNotEqual(content_hash(first), content_hash(changed))
 
 
+class TaxonomyGateTest(unittest.TestCase):
+    """Filing waits for an operator-approved taxonomy."""
+
+    def setUp(self) -> None:
+        self.conn = store.connect(":memory:")
+        store.initialize(self.conn)
+        store.ensure_mailbox(self.conn, "personal", "google", behaviours=PERSONAL_DEFAULTS, dry_run=False)
+        store.insert_rule(
+            self.conn,
+            rule_id="op",
+            account="personal",
+            matcher={"domain": "github.com"},
+            target="Receipts",
+            source="operator",
+            rank=40,
+            priority=1,
+        )
+
+    def tearDown(self) -> None:
+        self.conn.close()
+
+    def test_a_sweep_without_an_approved_taxonomy_files_nothing(self) -> None:
+        adapter = FakeMailbox([message("m1")])
+
+        report = sweep(self.conn, adapter, "personal", now=T0)
+
+        self.assertEqual(report.listed, 1)
+        self.assertEqual(report.taxonomy_missing, 1)
+        self.assertEqual(report.applied, 0)
+        self.assertEqual(adapter.applied, [])
+        self.assertIn("taxonomy missing", report.summary())
+        self.assertEqual(store.message_row(self.conn, "personal", "m1")["state"], "needs_decision")
+
+    def test_a_proposed_taxonomy_still_does_not_unlock_filing(self) -> None:
+        store.write_taxonomy(self.conn, "personal", [{"name": "Receipts", "risk": "low"}], state="proposed")
+        adapter = FakeMailbox([message("m1")])
+
+        report = sweep(self.conn, adapter, "personal", now=T0)
+
+        self.assertEqual(report.taxonomy_missing, 1)
+        self.assertEqual(adapter.applied, [])
+
+
 if __name__ == "__main__":
     unittest.main()

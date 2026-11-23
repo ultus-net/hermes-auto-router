@@ -40,6 +40,23 @@ hermes config set SYNTHETIC_API_KEY sk-...   # writes .env
 `verify` resolves both keys through Hermes' dotenv-aware lookup, so it reads
 `$HERMES_HOME/.env` even when the launching shell does not export them.
 
+## Mail (optional)
+
+The mail seam signs in through Hermes' OAuth helper, so mail code never reads a
+token. Create a Google Cloud **Desktop app** OAuth client, then set its
+credentials and sign in once from a terminal:
+
+```bash
+hermes config set HERMES_PERSONAL_GOOGLE_CLIENT_ID <id>.apps.googleusercontent.com
+hermes config set HERMES_PERSONAL_GOOGLE_CLIENT_SECRET <secret>
+hermes auth add auto-router:google
+```
+
+The declared grant is `gmail.modify` on `gmail.googleapis.com`. Hermes refreshes
+it on use and never starts a sign-in under the gateway or cron, so a revoked
+grant needs the same `hermes auth add` again. `plugin.yaml` declares both
+variables as optional: the router works when they are unset.
+
 ## What gets linked
 
 | Half | Source | Destination | Discovered by |

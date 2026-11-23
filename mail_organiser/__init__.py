@@ -25,7 +25,7 @@ def connection() -> sqlite3.Connection | None:
 
 
 def register(ctx) -> None:
-    """Attach the durable store. Phase 1 registers no command or tool.
+    """Attach the durable store. It registers no command or tool yet.
 
     ``ctx`` is unused here; later phases register their commands and tools
     through it. One load attaches one connection, because Hermes may reload the

@@ -69,10 +69,18 @@ The mail seam owns one SQLite database from
 removal and never lands in the plugin tree. The store name is deliberately the
 post-rename name from D11, so the data survives that rename too.
 
-Phase 1 ships the durable half and no user-facing surface: the eight-state
+Phase 1 ships the durable half with no user-facing surface: the eight-state
 journal, the rule engine with one precedence column, the four-behaviour policy
-gate, and an in-memory provider for the suite. `register(ctx)` applies the schema
-manifest and registers no command or tool.
+gate, and an in-memory provider for the suite. Phase 2 adds the Gmail adapter and
+the taxonomy bootstrap, still with no command or tool. `register(ctx)` applies
+the schema manifest and attaches the store.
+
+The Gmail adapter derives its allowlist from the protocol. Every `Mailbox`
+operation names exactly one method and path, and `send`, `drafts`, and `delete`
+raise before a URL is built, because `gmail.modify` technically reaches them.
+The adapter asks Hermes for the grant on every call, so the token never enters
+this code. The manifest declares the `google` entry with the `gmail.modify`
+scope.
 
 The invariants the rest of the seam depends on:
 
@@ -84,6 +92,8 @@ The invariants the rest of the seam depends on:
 | Operator 40 > learned 30 > classifier 20 | one rank column, one ordering |
 | A sensitive folder stays out of the classifier's reach | the gate, keyed on canonical D14 identity |
 | Filing waits for an approved taxonomy | the gate, before any provider call |
+| An expired cursor recovers in one cycle | `sweep._open_page` answers with one `resync` and keeps its cursor |
+| A refused Gmail family never reaches the network | the route allowlist in `gmail.py` |
 
 ## Cache layers
 

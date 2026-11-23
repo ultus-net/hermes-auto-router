@@ -1,0 +1,23 @@
+{
+  "id": "m2",
+  "threadId": "t2",
+  "labelIds": ["INBOX"],
+  "snippet": "Invoice due",
+  "internalDate": "1767225600000",
+  "payload": {
+    "mimeType": "multipart/alternative",
+    "headers": [
+      {"name": "From", "value": "Accounts <billing@stripe.com>"},
+      {"name": "To", "value": "operator@example.com"},
+      {"name": "Subject", "value": "Invoice 4712"},
+      {"name": "Message-ID", "value": "<m2@stripe.com>"},
+      {"name": "Date", "value": "Thu, 1 Jan 2026 00:00:00 +0000"}
+    ],
+    "parts": [
+      {
+        "mimeType": "text/plain",
+        "body": {"data": "SW52b2ljZSBib2R5", "size": 12}
+      }
+    ]
+  }
+}
