@@ -314,6 +314,10 @@ class MessageNotFound(StoreError):
     """No journal row for that mailbox and message id."""
 
 
+class MailboxMismatch(StoreError):
+    """A page from one mailbox was offered to another mailbox's journal."""
+
+
 @dataclass(frozen=True)
 class MailboxRow:
     """One mailbox's durable settings and frontier."""
@@ -475,8 +479,12 @@ def commit_page(
 
     written = 0
     stamp = iso(now or now_utc())
+    planned = list(entries)
+    for entry in planned:
+        if entry.ref.mailbox != account:
+            raise MailboxMismatch(f"{entry.ref.mailbox} page committed to {account}")
     with conn:
-        for entry in entries:
+        for entry in planned:
             written += _write_entry(conn, entry, stamp)
         if cursor is not None:
             conn.execute(
@@ -551,6 +559,17 @@ def message_row(conn: sqlite3.Connection, account: str, message_id: str) -> sqli
     if row is None:
         raise MessageNotFound(f"{account}/{message_id}")
     return row
+
+
+def record_message_id(conn: sqlite3.Connection, account: str, provider_id: str, current_id: str) -> None:
+    """Remember the provider id a move retired, so an old reference still resolves."""
+
+    with conn:
+        conn.execute(
+            "INSERT INTO mail_message_ids(mailbox, provider_id, current_id) VALUES (?, ?, ?) "
+            "ON CONFLICT(mailbox, provider_id) DO UPDATE SET current_id=excluded.current_id",
+            (account, provider_id, current_id),
+        )
 
 
 def set_state(
@@ -650,6 +669,45 @@ def release_lease(conn: sqlite3.Connection, account: str, holder: str, fencing: 
             (account, holder, fencing),
         )
     return result.rowcount == 1
+
+
+def start_sweep(
+    conn: sqlite3.Connection,
+    *,
+    sweep_id: str,
+    job_id: str,
+    scheduled_for: str,
+    mailbox: str,
+    execution_id: str | None = None,
+    now: datetime | None = None,
+) -> None:
+    """Open one sweep row. A repeat of the same occurrence is refused."""
+
+    try:
+        with conn:
+            conn.execute(
+                "INSERT INTO mail_sweeps "
+                "(id, job_id, scheduled_for, execution_id, mailbox, started_at, status) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'running')",
+                (sweep_id, job_id, scheduled_for, execution_id, mailbox, iso(now or now_utc())),
+            )
+    except sqlite3.IntegrityError as exc:
+        raise SweepBusy(f"{job_id} at {scheduled_for} already ran for {mailbox}") from exc
+
+
+def finish_sweep(
+    conn: sqlite3.Connection,
+    sweep_id: str,
+    *,
+    status: str,
+    counters: Mapping[str, Any],
+    now: datetime | None = None,
+) -> None:
+    with conn:
+        conn.execute(
+            "UPDATE mail_sweeps SET finished_at=?, status=?, counters_json=? WHERE id=?",
+            (iso(now or now_utc()), status, json.dumps(dict(counters), sort_keys=True), sweep_id),
+        )
 
 
 def open_decision(

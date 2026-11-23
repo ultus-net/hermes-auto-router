@@ -120,6 +120,12 @@ class CommitPageTest(Base):
             )
         )
 
+    def test_a_page_cannot_cross_mailboxes(self) -> None:
+        store.ensure_mailbox(self.conn, "work", "google", behaviours=WORK_DEFAULTS)
+        with self.assertRaises(store.MailboxMismatch):
+            store.commit_page(self.conn, "work", [entry("m1", "s1", JournalState.PENDING)], cursor="c1")
+        self.assertIsNone(store.mailbox(self.conn, "work").cursor)
+
 
 class LeaseTest(Base):
     def test_takeover_increments_the_fence_after_expiry(self) -> None:

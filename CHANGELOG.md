@@ -22,6 +22,15 @@ All notable changes to this project are recorded here. The format follows
   mailbox, journals dry runs, queues `ask` and `handoff`, blocks a `block`, and
   keeps `sensitive` folders out of the classifier's reach. Filing stays
   disabled until a taxonomy row is approved.
+- `mail_organiser/mailbox.py` defines the provider Protocol and
+  `mail_organiser/fake.py` implements it in memory, including folders, a stable
+  lookup, and injectable failures and unknown outcomes.
+- `mail_organiser/sweep.py` replays durable rows first, then lists bounded pages
+  and journals each page with the cursor it returns. It gates every row before
+  the provider call and journals the outcome. Three consecutive failures stop
+  the batch, three failed attempts become a decision, and a dry run settles
+  instead of stalling. The sweep refuses to journal a page whose mailbox does
+  not match the mailbox being swept.
 - The D14 names are sensitive before any mailbox seeds its keys, and a taxonomy
   write now advances `mail_mailboxes.taxonomy_version` so staleness is
   detectable. Rule writes advance `ruleset_generation`.
