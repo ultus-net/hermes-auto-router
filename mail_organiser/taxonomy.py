@@ -158,7 +158,13 @@ def approve(
             {"name": folder.name, "risk": folder.risk.value, "description": folder.description} for folder in folders
         ]
         _ensure_folders(adapter, rows)
-        return store.write_taxonomy(conn, account, rows, state="approved")
+        version = store.write_taxonomy(conn, account, rows, state="approved")
+        # The edited set replaces the proposal, so a later plain approve cannot
+        # resurrect the version the operator chose not to adopt.
+        proposal = store.latest_taxonomy_version(conn, account, state="proposed")
+        if proposal is not None:
+            store.set_taxonomy_state(conn, account, proposal, "rejected")
+        return version
 
     target = version if version is not None else store.latest_taxonomy_version(conn, account, state="proposed")
     if target is None:

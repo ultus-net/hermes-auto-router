@@ -1037,7 +1037,7 @@ def taxonomy_folders(conn: sqlite3.Connection, account: str, version: int) -> li
 
 
 def set_taxonomy_state(conn: sqlite3.Connection, account: str, version: int, state: str) -> bool:
-    """Move one version between ``proposed`` and ``approved``. The payload is immutable."""
+    """Move one version through its lifecycle states. The payload is immutable."""
 
     with conn:
         result = conn.execute(

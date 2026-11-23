@@ -180,6 +180,17 @@ class ApprovalTest(Base):
         self.assertEqual(risks(self.conn, "personal", 2), {"Newsletters": "low"})
         self.assertIn("Newsletters", {folder.name for folder in adapter.folders()})
 
+    def test_an_edited_approval_supersedes_the_proposal(self) -> None:
+        adapter = self.adapter([message("m1")], ["Receipts"])
+        taxonomy.bootstrap(self.conn, "personal", adapter)
+
+        taxonomy.approve(self.conn, "personal", adapter, edits=[{"name": "Newsletters", "risk": "low"}])
+
+        self.assertIsNone(store.latest_taxonomy_version(self.conn, "personal", state="proposed"))
+        self.assertEqual(store.latest_taxonomy_version(self.conn, "personal", state="approved"), 2)
+        with self.assertRaises(taxonomy.TaxonomyError):
+            taxonomy.approve(self.conn, "personal", adapter)
+
     def test_approve_without_a_proposed_version_is_refused(self) -> None:
         adapter = self.adapter()
 
