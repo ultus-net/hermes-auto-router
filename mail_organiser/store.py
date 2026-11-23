@@ -779,6 +779,23 @@ def insert_rule(
                 int(enabled),
             ),
         )
+        bump_ruleset_generation(conn, account)
+
+
+def bump_ruleset_generation(
+    conn: sqlite3.Connection,
+    account: str,
+    *,
+    now: datetime | None = None,
+) -> int:
+    """Advance the ruleset generation. The caller owns the transaction."""
+
+    conn.execute(
+        "UPDATE mail_mailboxes SET ruleset_generation=ruleset_generation+1, updated_at=? WHERE account=?",
+        (iso(now or now_utc()), account),
+    )
+    row = conn.execute("SELECT ruleset_generation FROM mail_mailboxes WHERE account=?", (account,)).fetchone()
+    return int(row["ruleset_generation"]) if row else 0
 
 
 def enabled_rules(conn: sqlite3.Connection, account: str) -> list[Rule]:
@@ -835,15 +852,16 @@ def seed_sensitive(conn: sqlite3.Connection, account: str, *, now: datetime | No
 
 
 def is_sensitive(conn: sqlite3.Connection, account: str, folder_name: str) -> bool:
-    """Fail closed: a case, width, rename, or nested variant still matches."""
+    """Fail closed: a case, width, rename, or nested variant still matches.
+
+    D14 names are always sensitive, even before a mailbox seeds its keys. The
+    guarantee must not depend on a prior write.
+    """
 
     key = sensitive_key(folder_name)
     rows = conn.execute("SELECT key FROM mail_sensitive_keys WHERE mailbox=?", (account,)).fetchall()
-    for row in rows:
-        stored = row["key"]
-        if key == stored or key.startswith(stored + "/") or stored.startswith(key + "/"):
-            return True
-    return False
+    known = {row["key"] for row in rows} | {sensitive_key(name) for name in D14_SENSITIVE_NAMES}
+    return any(key == stored or key.startswith(stored + "/") or stored.startswith(key + "/") for stored in known)
 
 
 def write_taxonomy(
@@ -882,6 +900,10 @@ def write_taxonomy(
         conn.execute(
             "INSERT INTO mail_taxonomy(mailbox, version, state, json) VALUES (?, ?, ?, ?)",
             (account, version, state, json.dumps(payload, sort_keys=True)),
+        )
+        conn.execute(
+            "UPDATE mail_mailboxes SET taxonomy_version=?, updated_at=? WHERE account=?",
+            (version, iso(now_utc()), account),
         )
         for item in payload:
             if item["risk"] == Risk.SENSITIVE.value:

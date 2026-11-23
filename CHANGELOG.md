@@ -13,6 +13,18 @@ All notable changes to this project are recorded here. The format follows
   advances the listing cursor only with the journal, fenced mailbox leases,
   single-use decisions with expiry in the predicate, precedence-ordered rules,
   and canonical sensitive-folder keys that survive case, width, and nesting.
+- `mail_organiser/rules.py` adds the deterministic matcher, the operator 40 /
+  learned 30 / classifier 20 precedence, learning from two corrections of one
+  key, the suggestions listing and dismissal, and rule deletion with an undo
+  receipt that re-links only rows still unclaimed.
+- `mail_organiser/policy.py` adds the four-behaviour defaults per profile and
+  the single `apply_gate()` checked before provider access. It refuses a paused
+  mailbox, journals dry runs, queues `ask` and `handoff`, blocks a `block`, and
+  keeps `sensitive` folders out of the classifier's reach. Filing stays
+  disabled until a taxonomy row is approved.
+- The D14 names are sensitive before any mailbox seeds its keys, and a taxonomy
+  write now advances `mail_mailboxes.taxonomy_version` so staleness is
+  detectable. Rule writes advance `ruleset_generation`.
 
 ### Changed
 

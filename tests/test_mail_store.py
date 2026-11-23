@@ -52,9 +52,6 @@ class Base(unittest.TestCase):
         store.initialize(self.conn)
         store.ensure_mailbox(self.conn, "personal", "google", behaviours=PERSONAL_DEFAULTS)
 
-    def tearDown(self) -> None:
-        self.conn.close()
-
 
 class SchemaTest(Base):
     def test_manifest_is_idempotent_and_versioned(self) -> None:
@@ -209,6 +206,18 @@ class SensitiveTest(Base):
         self.assertIsNotNone(folders)
         self.assertEqual(folders[0].risk, Risk.SENSITIVE)
         self.assertTrue(store.is_sensitive(self.conn, "personal", "Receipts"))
+
+    def test_taxonomy_approval_advances_the_mailbox_version(self) -> None:
+        self.assertEqual(store.mailbox(self.conn, "personal").taxonomy_version, 0)
+        version = store.write_taxonomy(self.conn, "personal", [{"name": "Receipts", "risk": "low"}], state="approved")
+        self.assertEqual(store.mailbox(self.conn, "personal").taxonomy_version, version)
+
+    def test_d14_names_are_sensitive_before_any_seed(self) -> None:
+        self.assertTrue(store.is_sensitive(self.conn, "personal", "Finance"))
+        self.assertEqual(
+            self.conn.execute("SELECT COUNT(*) AS n FROM mail_sensitive_keys").fetchone()["n"],
+            0,
+        )
 
 
 class RulesTest(Base):
