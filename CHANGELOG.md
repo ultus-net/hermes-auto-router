@@ -6,6 +6,14 @@ All notable changes to this project are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `mail_organiser/models.py` and `mail_organiser/store.py` begin the mail seam:
+  frozen boundary values, the eight-state journal, an atomic page commit that
+  advances the listing cursor only with the journal, fenced mailbox leases,
+  single-use decisions with expiry in the predicate, precedence-ordered rules,
+  and canonical sensitive-folder keys that survive case, width, and nesting.
+
 ### Changed
 
 - The README is split into a short landing page plus `docs/`, so the install,
