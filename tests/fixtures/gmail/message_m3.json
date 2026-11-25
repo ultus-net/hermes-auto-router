@@ -1,0 +1,17 @@
+{
+  "id": "m3",
+  "threadId": "t3",
+  "labelIds": ["INBOX"],
+  "snippet": "This week",
+  "internalDate": "1767225600000",
+  "payload": {
+    "mimeType": "text/plain",
+    "headers": [
+      {"name": "From", "value": "Digest <digest@example.org>"},
+      {"name": "Subject", "value": "Weekly digest"},
+      {"name": "Message-ID", "value": "<m3@example.org>"},
+      {"name": "Date", "value": "Thu, 1 Jan 2026 00:00:00 +0000"}
+    ],
+    "body": {"data": "RGlnZXN0IGJvZHk", "size": 11}
+  }
+}

@@ -11,12 +11,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mail_organiser import store
 from mail_organiser.fake import FakeMailbox
+from mail_organiser.mailbox import CursorExpired
 from mail_organiser.models import (
     PERSONAL_DEFAULTS,
     WORK_DEFAULTS,
     Decision,
     Folder,
     Message,
+    Page,
     Ref,
     Scope,
     Verb,
@@ -152,6 +154,33 @@ class SweepTest(Base):
         self.assertEqual(store.message_row(self.conn, "personal", "m1")["state"], "confirmed")
         self.assertEqual(len(adapter.applied), 1)
 
+    def test_an_expired_cursor_resyncs_and_keeps_the_replacement(self) -> None:
+        class ExpiredMailbox(FakeMailbox):
+            def list_since(self, cursor, limit, scope):
+                if cursor is not None:
+                    raise CursorExpired("older than the retention window")
+                return super().list_since(cursor, limit, scope)
+
+        self.add_rule()
+        adapter = ExpiredMailbox([message("m1")])
+
+        report = self.sweep(adapter)
+
+        self.assertEqual(report.listed, 1)
+        self.assertEqual(report.applied, 1)
+        self.assertEqual(store.mailbox(self.conn, "personal").cursor, "1")
+
+    def test_a_resync_that_returns_another_scope_stops_the_sweep(self) -> None:
+        class WrongScope(FakeMailbox):
+            def list_since(self, cursor, limit, scope):
+                raise CursorExpired("older than the retention window")
+
+            def resync(self, scope, limit):
+                return Page(messages=(), scope=Scope.ARCHIVE, next_cursor="archive")
+
+        with self.assertRaises(SweepError):
+            self.sweep(WrongScope([message("m1")]))
+
     def test_a_paused_mailbox_lists_nothing(self) -> None:
         self.add_rule()
         store.set_paused(self.conn, "personal", True)
@@ -263,6 +292,49 @@ class FakeMailboxTest(unittest.TestCase):
 
         self.assertEqual(content_hash(first), content_hash(copy))
         self.assertNotEqual(content_hash(first), content_hash(changed))
+
+
+class TaxonomyGateTest(unittest.TestCase):
+    """Filing waits for an operator-approved taxonomy."""
+
+    def setUp(self) -> None:
+        self.conn = store.connect(":memory:")
+        store.initialize(self.conn)
+        store.ensure_mailbox(self.conn, "personal", "google", behaviours=PERSONAL_DEFAULTS, dry_run=False)
+        store.insert_rule(
+            self.conn,
+            rule_id="op",
+            account="personal",
+            matcher={"domain": "github.com"},
+            target="Receipts",
+            source="operator",
+            rank=40,
+            priority=1,
+        )
+
+    def tearDown(self) -> None:
+        self.conn.close()
+
+    def test_a_sweep_without_an_approved_taxonomy_files_nothing(self) -> None:
+        adapter = FakeMailbox([message("m1")])
+
+        report = sweep(self.conn, adapter, "personal", now=T0)
+
+        self.assertEqual(report.listed, 1)
+        self.assertEqual(report.taxonomy_missing, 1)
+        self.assertEqual(report.applied, 0)
+        self.assertEqual(adapter.applied, [])
+        self.assertIn("taxonomy missing", report.summary())
+        self.assertEqual(store.message_row(self.conn, "personal", "m1")["state"], "needs_decision")
+
+    def test_a_proposed_taxonomy_still_does_not_unlock_filing(self) -> None:
+        store.write_taxonomy(self.conn, "personal", [{"name": "Receipts", "risk": "low"}], state="proposed")
+        adapter = FakeMailbox([message("m1")])
+
+        report = sweep(self.conn, adapter, "personal", now=T0)
+
+        self.assertEqual(report.taxonomy_missing, 1)
+        self.assertEqual(adapter.applied, [])
 
 
 if __name__ == "__main__":

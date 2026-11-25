@@ -14,3 +14,6 @@ Identifiers in code and prose use these terms. One term means one concept.
 | provider plugin | The `providers/synthetic/` half: the Synthetic provider profile. |
 | mail seam | The `mail_organiser/` package: durable journal, rule engine, policy gate, and provider adapters. |
 | durable work | A journalled decision whose outcome does not depend on the provider listing window. |
+| taxonomy | The folder set the classifier may file into, with a `low` or `sensitive` risk per folder. Filing waits for an `approved` version. |
+| route allowlist | The one HTTP method and path each `Mailbox` operation may call, derived from the protocol so an operation with no route cannot ship. |
+| cursor expiry | A provider's refusal of a cursor older than its retention window; the sweep answers with one `resync` and keeps the replacement cursor. |

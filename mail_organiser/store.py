@@ -1003,3 +1003,45 @@ def approved_taxonomy(conn: sqlite3.Connection, account: str) -> list[TaxonomyFo
         TaxonomyFolder(name=item["name"], risk=Risk(item["risk"]), description=item.get("description", ""))
         for item in json.loads(row["json"])
     ]
+
+
+def latest_taxonomy_version(
+    conn: sqlite3.Connection,
+    account: str,
+    *,
+    state: str | None = None,
+) -> int | None:
+    """The newest version, optionally limited to one lifecycle state."""
+
+    if state is None:
+        row = conn.execute(
+            "SELECT MAX(version) AS version FROM mail_taxonomy WHERE mailbox=?",
+            (account,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT MAX(version) AS version FROM mail_taxonomy WHERE mailbox=? AND state=?",
+            (account, state),
+        ).fetchone()
+    return None if row is None or row["version"] is None else int(row["version"])
+
+
+def taxonomy_folders(conn: sqlite3.Connection, account: str, version: int) -> list[dict[str, str]] | None:
+    """One version's stored payload, or ``None`` when it does not exist."""
+
+    row = conn.execute(
+        "SELECT json FROM mail_taxonomy WHERE mailbox=? AND version=?",
+        (account, version),
+    ).fetchone()
+    return None if row is None else list(json.loads(row["json"]))
+
+
+def set_taxonomy_state(conn: sqlite3.Connection, account: str, version: int, state: str) -> bool:
+    """Move one version through its lifecycle states. The payload is immutable."""
+
+    with conn:
+        result = conn.execute(
+            "UPDATE mail_taxonomy SET state=? WHERE mailbox=? AND version=?",
+            (state, account, version),
+        )
+    return result.rowcount == 1

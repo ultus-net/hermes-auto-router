@@ -1,0 +1,28 @@
+{
+  "id": "m1",
+  "threadId": "t1",
+  "labelIds": ["INBOX", "UNREAD"],
+  "snippet": "Thanks for your order",
+  "internalDate": "1767225600000",
+  "payload": {
+    "mimeType": "multipart/alternative",
+    "headers": [
+      {"name": "From", "value": "GitHub <notifications@github.com>"},
+      {"name": "To", "value": "operator@example.com"},
+      {"name": "Subject", "value": "Your receipt for order 4711"},
+      {"name": "Message-ID", "value": "<m1@github.com>"},
+      {"name": "List-Id", "value": "<repo.github.com>"},
+      {"name": "Date", "value": "Thu, 1 Jan 2026 00:00:00 +0000"}
+    ],
+    "parts": [
+      {
+        "mimeType": "text/plain",
+        "body": {"data": "UmVjZWlwdCBib2R5", "size": 12}
+      },
+      {
+        "mimeType": "text/html",
+        "body": {"data": "PGI+UmVjZWlwdDwvYj4=", "size": 15}
+      }
+    ]
+  }
+}

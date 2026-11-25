@@ -11,6 +11,20 @@ tags:
 optional_env:
   - SYNTHETIC_API_KEY
   - OPENROUTER_API_KEY
+  - HERMES_PERSONAL_GOOGLE_CLIENT_ID
+  - HERMES_PERSONAL_GOOGLE_CLIENT_SECRET
+oauth:
+  - id: google
+    authorize_url: https://accounts.google.com/o/oauth2/v2/auth
+    token_url: https://oauth2.googleapis.com/token
+    scopes:
+      - https://www.googleapis.com/auth/gmail.modify
+    client_id_env: HERMES_PERSONAL_GOOGLE_CLIENT_ID
+    client_secret_env: HERMES_PERSONAL_GOOGLE_CLIENT_SECRET
+    hosts: [gmail.googleapis.com]
+    authorize_params:
+      access_type: offline
+      prompt: consent
 config_schema:
   enabled:
     type: bool

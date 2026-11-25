@@ -11,7 +11,7 @@ rather than by the id it no longer has.
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from .models import (
     ApplyResult,
@@ -23,6 +23,15 @@ from .models import (
 )
 
 
+class CursorExpired(Exception):
+    """The provider's cursor is older than its retention window.
+
+    The sweep answers it with one ``resync`` and keeps the replacement cursor;
+    without that answer a gap would stall the mailbox silently.
+    """
+
+
+@runtime_checkable
 class Mailbox(Protocol):
     """What the sweep needs, and nothing a provider happens to offer."""
 

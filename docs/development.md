@@ -18,7 +18,10 @@ venv:
 | --- | --- |
 | `tests/test_mail_store.py` | journal, cursor, leases, decisions, sensitive keys |
 | `tests/test_mail_policy.py` | rule precedence, learning, undo receipts, the gate |
-| `tests/test_mail_sweep.py` | fake provider, bounded sweep, retries, dry run |
+| `tests/test_mail_sweep.py` | fake provider, bounded sweep, retries, dry run, the taxonomy gate |
+| `tests/test_mail_gmail.py` | route allowlist, Gmail listing and normalisation, labels, apply, moves, cursor expiry |
+| `tests/test_mail_contract.py` | one `Mailbox` contract run against the fake and Gmail adapters |
+| `tests/test_mail_taxonomy.py` | bootstrap sample, D14 risk enforcement, approval, failed label creation |
 | `tests/test_mail_attach.py` | store attach through a fake `plugin_storage` |
 | `tests/test_isolation.py` | no cross-seam imports; the guard and the load deadline |
 

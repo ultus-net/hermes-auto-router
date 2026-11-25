@@ -49,6 +49,31 @@ All notable changes to this project are recorded here. The format follows
   mail import past `plugins.load_timeout_seconds` abandons every registration.
   `tests/test_mail_attach.py` drives the attach through a fake
   `plugins.plugin_storage` with Hermes' signature and `row_factory=None`.
+- The sweep answers an expired cursor with one `resync` and keeps the
+  replacement cursor, and it counts a filing refused for a missing approved
+  taxonomy as `taxonomy_missing`.
+- `mail_organiser/gmail.py` adds the Gmail adapter behind a protocol-route
+  allowlist: one method and path per `Mailbox` operation, and a `send`, `drafts`,
+  and `delete` family that raises before a URL is built. Listing uses
+  `users.messages.list` for the inbox and archive windows and
+  `users.history.list` for an incremental cursor; a 404 on history raises
+  `CursorExpired`. Folders map to labels, a lost create race re-lists and finds
+  the winner, and a message is normalised from the full payload.
+- `mail_organiser/taxonomy.py` bootstraps the folder taxonomy: it samples up to
+  300 inbox messages, proposes folders, and forces `sensitive` on any name,
+  description, or stored key that matches D14. `approve` creates every provider
+  label first, then writes the `approved` version; an edit pass writes a new
+  approved version.
+- `plugin.yaml` declares the `google` OAuth entry with the `gmail.modify` scope
+  and the `gmail.googleapis.com` host, so Hermes owns the grant and the adapter
+  never sees a token.
+- `tests/test_mail_contract.py` runs one `Mailbox` contract against
+  `FakeMailbox` and `GmailMailbox`. `tests/gmail_fake.py` replays documented
+  Gmail payloads, names their provenance, and moves its own label state, so
+  normalisation, moves, and cursor expiry are checked without a credential.
+- `tests/test_mail_taxonomy.py` covers bootstrap sampling, deterministic
+  proposals, forced D14 risk, a missing risk failing closed, approval, and a
+  failed label creation that leaves the proposal unapproved.
 
 ### Changed
 

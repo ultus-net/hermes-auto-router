@@ -14,8 +14,8 @@ Three capabilities ride in this plugin:
    absent from models.dev and therefore invisible to Hermes otherwise.
 
 3. **Mail organiser** (``mail_organiser/``). The durable mail seam: a journalled
-   state machine, a deterministic rule engine, the policy gate, and the provider
-   adapters. Phase 1 attaches the store and registers no command or tool.
+   state machine, a deterministic rule engine, the policy gate, the Gmail
+   adapter, and the taxonomy bootstrap. It registers no command or tool yet.
 
 Cross-provider failover is Hermes' own ``fallback_providers`` chain, written by
 ``hermes auto-router apply``. A plugin cannot redirect an in-flight request, and
